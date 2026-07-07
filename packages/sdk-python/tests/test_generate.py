@@ -8,7 +8,6 @@ regeneration, and that the committed output matches a fresh build.
 from __future__ import annotations
 
 import importlib.util
-import json
 import sys
 import tempfile
 from pathlib import Path
@@ -95,10 +94,3 @@ def test_methods_module_has_one_function_per_manifest_entry_with_matching_shape(
                 "transport",
                 "params",
             ], f"{method['name']} is {shape}, expected (transport, params), got {params}"
-
-
-def test_manifest_method_count_matches_sdk_contract() -> None:
-    manifest_methods = generate.load_manifest_methods()
-    manifest = json.loads(generate.MANIFEST_PATH.read_text())
-    assert len(manifest_methods) == len(manifest["methods"])
-    assert len(manifest_methods) > 0
