@@ -1,6 +1,6 @@
 """Smoke-tests the generated typed surface against a real running SDK worker,
 via the hand-written PoC transport (poc_heartbeat.py / poc_transport.py) —
-QVAC-17719's Transport integration (bare-rpc-python) isn't built yet.
+the production socket transport isn't built yet.
 
 Needs the SDK's Bare worker built (`bun run build` in packages/sdk) and the
 Bare runtime prebuild available; skipped unless QVAC_POC_SDK_DIR points at a
@@ -8,8 +8,7 @@ built SDK checkout, so it never blocks a normal `pytest` run or CI.
 
 Only exercises request-reply methods that need no loaded model (`heartbeat`,
 `state`) — server-stream/duplex methods need a downloaded model, which this
-environment doesn't have; QVAC-21805's own scope is the generated models and
-stubs, not proving every call shape needs a real model loaded.
+environment doesn't have.
 """
 
 from __future__ import annotations

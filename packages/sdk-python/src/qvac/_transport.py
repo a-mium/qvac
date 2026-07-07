@@ -1,9 +1,9 @@
 """Wire-transport interface the generated method stubs call through.
 
-QVAC-21805 generates the typed request/response models and method stubs
-from the contract (QVAC-21804); it does not implement the socket transport
-that speaks the worker's `bare-rpc` protocol — that is a separate, still
-unbuilt piece (QVAC's "Transport integration (bare-rpc-python)" task).
+This package generates the typed request/response models and method stubs
+from the SDK's contract; it does not implement the socket transport that
+speaks the worker's `bare-rpc` protocol — that is a separate, still unbuilt
+piece.
 
 Any object providing these three methods can back the generated stubs.
 `tests/poc_transport.py` implements this protocol as a thin adapter over the

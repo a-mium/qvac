@@ -3,9 +3,8 @@
 QVAC RPC proof-of-concept — talk to the SDK worker from Python.
 
 Copied verbatim (path constants only made worktree-portable via env vars)
-from the hand-written PoC used to design the Python client
-(QVAC-17719 "Design the Python SDK client"). Used here as the test harness
-for QVAC-21805's generated typed surface: `poc_transport.py` adapts
+from the hand-written PoC used to design the Python client. Used here as
+the test harness for the generated typed surface: `poc_transport.py` adapts
 `QvacWorker` below to the `qvac._transport.Transport` protocol so the
 generated stubs can be smoke-tested against a real running worker ahead of
 the production transport (a separate, not-yet-built task).
