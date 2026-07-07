@@ -1,0 +1,32 @@
+"""Wire-transport interface the generated method stubs call through.
+
+QVAC-21805 generates the typed request/response models and method stubs
+from the contract (QVAC-21804); it does not implement the socket transport
+that speaks the worker's `bare-rpc` protocol — that is a separate, still
+unbuilt piece (QVAC's "Transport integration (bare-rpc-python)" task).
+
+Any object providing these three methods can back the generated stubs.
+`tests/poc_transport.py` implements this protocol as a thin adapter over the
+hand-written PoC transport, for testing the generated surface against a real
+worker ahead of the production transport landing.
+"""
+
+from __future__ import annotations
+
+from typing import Any, Iterable, Iterator, Protocol
+
+
+class Transport(Protocol):
+    def call(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """Unary request/reply: send `payload`, return the single parsed response."""
+        ...
+
+    def call_stream(self, payload: dict[str, Any]) -> Iterator[dict[str, Any]]:
+        """Server-stream: send `payload`, yield each parsed response chunk."""
+        ...
+
+    def call_duplex(
+        self, payload: dict[str, Any], up: Iterable[bytes]
+    ) -> Iterator[dict[str, Any]]:
+        """Duplex: send `payload` then stream `up` chunks, yield response chunks."""
+        ...

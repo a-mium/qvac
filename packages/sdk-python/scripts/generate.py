@@ -1,0 +1,302 @@
+#!/usr/bin/env python3
+"""Regenerate the Python client's typed surface (pydantic models + method
+stubs) from the SDK contract (../sdk/contract/{schema,manifest}.json).
+
+Usage:
+  python3 scripts/generate.py            # write the generated files
+  python3 scripts/generate.py --check    # exit 1 if committed output is stale
+"""
+
+from __future__ import annotations
+
+import importlib
+import json
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+
+PACKAGE_ROOT = Path(__file__).resolve().parent.parent
+CONTRACT_DIR = PACKAGE_ROOT.parent / "sdk" / "contract"
+SCHEMA_PATH = CONTRACT_DIR / "schema.json"
+MANIFEST_PATH = CONTRACT_DIR / "manifest.json"
+SRC_DIR = PACKAGE_ROOT / "src"
+GENERATED_DIR = SRC_DIR / "qvac" / "_generated"
+MODELS_DIR = GENERATED_DIR / "models"
+INDEX_PATH = GENERATED_DIR / "__init__.py"
+METHODS_PATH = GENERATED_DIR / "methods.py"
+
+CALL_SHAPE_ANNOTATION = {
+    "request-reply": "reply",
+    "server-stream": "stream",
+    "duplex": "duplex",
+}
+
+
+def pascal_case(name: str) -> str:
+    return "".join(
+        part[:1].upper() + part[1:] for part in re.split(r"[:\-_]", name) if part
+    )
+
+
+def snake_case(name: str) -> str:
+    return re.sub(r"(?<!^)(?=[A-Z])", "_", name).lower()
+
+
+def load_manifest_methods() -> list[dict]:
+    return json.loads(MANIFEST_PATH.read_text())["methods"]
+
+
+def run_datamodel_codegen(output_dir: Path) -> None:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "datamodel_code_generator",
+            "--input",
+            str(SCHEMA_PATH),
+            "--input-file-type",
+            "jsonschema",
+            "--output",
+            str(output_dir),
+            "--output-model-type",
+            "pydantic_v2.BaseModel",
+            "--use-title-as-name",
+            "--snake-case-field",
+            "--target-python-version",
+            "3.10",
+            "--disable-timestamp",
+            "--disable-warnings",
+        ],
+        check=True,
+    )
+
+
+def resolve_titles(
+    models_dir: Path, manifest_methods: list[dict]
+) -> dict[str, tuple[str | None, str]]:
+    """Map every request/response title to where it actually lives in a
+    freshly generated `models` package: either directly (title is itself a
+    top-level name) or via a per-method wrapper module exposing a bare
+    `Request`/`Response` — datamodel-code-generator gives some titled unions
+    their own module (named after the wire method) whose own top-level name
+    is generic, not the title; see contract/README.md and this package's
+    README for why. Returns `{title: (submodule_or_None, attribute_name)}`.
+
+    Imports `models_dir` through a throwaway package tree under a fresh
+    temp directory — never touches the real `sys.path`/`sys.modules` state
+    or the committed `src/qvac/_generated/models`, so a `--check` run can't
+    leave a partially-swapped tree behind if it's interrupted.
+    """
+    with tempfile.TemporaryDirectory() as fake_src:
+        fake_qvac = Path(fake_src) / "qvac"
+        fake_qvac.mkdir()
+        (fake_qvac / "__init__.py").write_text("")
+        fake_generated = fake_qvac / "_generated"
+        fake_generated.mkdir()
+        (fake_generated / "__init__.py").write_text("")
+        shutil.copytree(models_dir, fake_generated / "models")
+
+        sys.path.insert(0, fake_src)
+        try:
+            models_pkg = importlib.import_module("qvac._generated.models")
+            resolved: dict[str, tuple[str | None, str]] = {}
+            for method in manifest_methods:
+                name = method["name"]
+                for attr in ("Request", "Response"):
+                    title = f"{pascal_case(name)}{attr}"
+                    if hasattr(models_pkg, title):
+                        resolved[title] = (None, title)
+                        continue
+                    submodule = None
+                    try:
+                        submodule = importlib.import_module(
+                            f"qvac._generated.models.{name}"
+                        )
+                    except ImportError:
+                        pass
+                    if submodule is not None and hasattr(submodule, attr):
+                        resolved[title] = (name, attr)
+                        continue
+                    raise RuntimeError(
+                        f'Could not resolve generated class for "{title}" '
+                        f'(method "{name}"). datamodel-code-generator\'s module-splitting '
+                        "changed shape — extend resolve_titles in scripts/generate.py."
+                    )
+            return resolved
+        finally:
+            sys.path.remove(fake_src)
+            for module_name in list(sys.modules):
+                if module_name == "qvac" or module_name.startswith("qvac."):
+                    del sys.modules[module_name]
+
+
+def render_index(resolved: dict[str, tuple[str | None, str]]) -> str:
+    lines = [
+        "# Generated by scripts/generate.py. Do not edit by hand.",
+        '"""Flat, stable re-export of every request/response model, regardless',
+        "of which internal module datamodel-code-generator placed it in.",
+        '"""',
+        "",
+        "from __future__ import annotations",
+        "",
+    ]
+    by_module: dict[str | None, list[tuple[str, str]]] = {}
+    for title, (module, attr) in resolved.items():
+        by_module.setdefault(module, []).append((attr, title))
+
+    if None in by_module:
+        names = sorted(title for _, title in by_module[None])
+        lines.append(f"from .models import {', '.join(names)}")
+    for module in sorted(m for m in by_module if m is not None):
+        for attr, title in sorted(by_module[module]):
+            lines.append(f"from .models.{module} import {attr} as {title}")
+
+    lines.append("")
+    lines.append("__all__ = [")
+    for title in sorted(resolved):
+        lines.append(f'    "{title}",')
+    lines.append("]")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def render_methods_module(manifest_methods: list[dict]) -> str:
+    lines = [
+        "# Generated by scripts/generate.py. Do not edit by hand.",
+        '"""One typed function per contract/manifest.json entry, grouped by',
+        "call shape: request-reply returns the response directly,",
+        "server-stream/duplex return an iterator of response chunks.",
+        "",
+        "Each function only builds the wire payload and validates the reply —",
+        "it takes a `Transport` to actually speak the wire protocol, which this",
+        "package does not implement (see qvac._transport.Transport).",
+        '"""',
+        "",
+        "from __future__ import annotations",
+        "",
+        "from typing import Iterable, Iterator",
+        "",
+        "from .._transport import Transport",
+        "from . import (",
+    ]
+    all_titles = sorted(
+        {
+            f"{pascal_case(m['name'])}{attr}"
+            for m in manifest_methods
+            for attr in ("Request", "Response")
+        }
+    )
+    for title in all_titles:
+        lines.append(f"    {title},")
+    lines.append(")")
+    lines.append("")
+
+    for method in manifest_methods:
+        name = method["name"]
+        shape = CALL_SHAPE_ANNOTATION[method["callShape"]]
+        func_name = snake_case(name)
+        request_title = f"{pascal_case(name)}Request"
+        response_title = f"{pascal_case(name)}Response"
+        lines.append("")
+        dump = "params.model_dump(mode='json', by_alias=True, exclude_unset=True)"
+        if shape == "reply":
+            lines.append(
+                f"def {func_name}(transport: Transport, params: {request_title}) -> {response_title}:"
+            )
+            lines.append(f"    payload = {dump}")
+            lines.append(
+                f"    return {response_title}.model_validate(transport.call(payload))"
+            )
+        elif shape == "stream":
+            lines.append(
+                f"def {func_name}(transport: Transport, params: {request_title}) -> Iterator[{response_title}]:"
+            )
+            lines.append(f"    payload = {dump}")
+            lines.append("    for chunk in transport.call_stream(payload):")
+            lines.append(f"        yield {response_title}.model_validate(chunk)")
+        else:
+            lines.append(
+                f"def {func_name}(\n"
+                f"    transport: Transport, params: {request_title}, up: Iterable[bytes]\n"
+                f") -> Iterator[{response_title}]:"
+            )
+            lines.append(f"    payload = {dump}")
+            lines.append("    for chunk in transport.call_duplex(payload, up):")
+            lines.append(f"        yield {response_title}.model_validate(chunk)")
+        lines.append("")
+    return "\n".join(lines)
+
+
+def format_with_black(paths: list[Path]) -> None:
+    subprocess.run(
+        [sys.executable, "-m", "black", "--quiet", *[str(p) for p in paths]],
+        check=True,
+    )
+
+
+def build(output_root: Path) -> None:
+    """Renders a complete `_generated/` tree (models/, __init__.py, methods.py)
+    into `output_root`. Never touches the real committed GENERATED_DIR."""
+    models_dir = output_root / "models"
+    run_datamodel_codegen(models_dir)
+    manifest_methods = load_manifest_methods()
+    resolved = resolve_titles(models_dir, manifest_methods)
+
+    index_path = output_root / "__init__.py"
+    methods_path = output_root / "methods.py"
+    index_path.write_text(render_index(resolved))
+    methods_path.write_text(render_methods_module(manifest_methods))
+    format_with_black([index_path, methods_path])
+
+
+def compare_dirs(fresh: Path, committed: Path) -> bool:
+    """Prints every difference between `fresh` and `committed`; returns
+    whether they match exactly (recursively)."""
+    if not committed.exists():
+        print(f"{committed.relative_to(PACKAGE_ROOT)} is missing")
+        return False
+    import filecmp
+
+    dcmp = filecmp.dircmp(fresh, committed)
+    ok = not dcmp.left_only and not dcmp.right_only and not dcmp.diff_files
+    for name in dcmp.left_only:
+        print(f"missing: {(committed / name).relative_to(PACKAGE_ROOT)}")
+    for name in dcmp.right_only:
+        print(
+            f"unexpected (stale, should be removed): {(committed / name).relative_to(PACKAGE_ROOT)}"
+        )
+    for name in dcmp.diff_files:
+        print(f"out of date: {(committed / name).relative_to(PACKAGE_ROOT)}")
+    for name in dcmp.common_dirs:
+        ok = compare_dirs(fresh / name, committed / name) and ok
+    return ok
+
+
+def main() -> int:
+    check_only = "--check" in sys.argv
+
+    with tempfile.TemporaryDirectory() as tmp:
+        output_root = Path(tmp) / "_generated"
+        build(output_root)
+
+        if check_only:
+            if compare_dirs(output_root, GENERATED_DIR):
+                return 0
+            print(
+                "Generated Python client is stale. Run 'python3 scripts/generate.py' and commit the result."
+            )
+            return 1
+
+        if GENERATED_DIR.exists():
+            shutil.rmtree(GENERATED_DIR)
+        shutil.copytree(output_root, GENERATED_DIR)
+        print(f"wrote {GENERATED_DIR.relative_to(PACKAGE_ROOT)}")
+        return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
