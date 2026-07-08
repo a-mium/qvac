@@ -1,23 +1,28 @@
 """Real end-to-end test of a progress-capable method against a running SDK
-worker: loads an actual cached model over a local HTTP server (so the
-worker's `http` model-src resolver — the one that actually emits
-`modelProgress` events — is exercised for real, not a plain local-path
-resolve which never fires progress at all) and validates every event the
-worker streams back against the generated pydantic models.
+worker: loads an actual cached model via a `registry://` modelSrc and
+validates every event the worker streams back against the generated
+pydantic models.
+
+`registry://` is the only modelSrc shape (besides `http://`/hyperdrive) that
+threads a progress callback through at all — a plain local-path modelSrc
+never emits `modelProgress` (see resolve.ts's filesystem branch). Pointed at
+a registryPath already present in the SDK's built-in catalog
+(packages/sdk/models/registry/models.ts, QWEN3_600M_INST_Q4) whose cached
+file already exists locally, this hits the registry resolver's cache-hit
+branch — a real code path, purely local disk I/O and checksum verification,
+no network — which still emits a real synthetic 100% `modelProgress` event
+before the terminal reply.
 
 Needs the SDK's Bare worker built (same QVAC_POC_SDK_DIR requirement as
-test_poc_smoke.py) and a real GGUF model on disk (QVAC_POC_MODEL, defaulting
-to a small model already present in the local `~/.qvac/models` cache);
+test_poc_smoke.py) and that model already cached locally (QVAC_POC_MODEL,
+defaulting to `~/.qvac/models/5b8aae816570a09d_Qwen3-0.6B-Q4_0.gguf`);
 skipped when either is missing.
 """
 
 from __future__ import annotations
 
-import functools
-import http.server
 import os
 import sys
-import threading
 from pathlib import Path
 
 import pytest
@@ -31,6 +36,14 @@ DEFAULT_MODEL = str(
 )
 MODEL_PATH = Path(os.environ.get("QVAC_POC_MODEL", DEFAULT_MODEL))
 
+# QWEN3_600M_INST_Q4 from packages/sdk/models/registry/models.ts — its
+# registryPath hashes (server/utils/formatting.ts's generateShortHash) to
+# `5b8aae816570a09d`, matching MODEL_PATH's cache filename exactly.
+REGISTRY_MODEL_SRC = (
+    "registry://hf/unsloth/Qwen3-0.6B-GGUF/blob/"
+    "50968a4468ef4233ed78cd7c3de230dd1d61a56b/Qwen3-0.6B-Q4_0.gguf"
+)
+
 pytestmark = [
     pytest.mark.skipif(
         "QVAC_POC_SDK_DIR" not in os.environ,
@@ -38,35 +51,9 @@ pytestmark = [
     ),
     pytest.mark.skipif(
         not MODEL_PATH.is_file(),
-        reason=f"no model at {MODEL_PATH}; set QVAC_POC_MODEL to a real .gguf file",
+        reason=f"no cached model at {MODEL_PATH}; set QVAC_POC_MODEL to a real .gguf file",
     ),
 ]
-
-
-# The worker caches downloads by a hash of the source URL (createHttpDownloadKey
-# in server/rpc/handlers/load-model/http.ts), not by content — a fixed port
-# keeps that cache key stable across test runs so repeat runs hit the "already
-# cached" branch instead of writing a fresh multi-hundred-MB copy every time.
-_LOCAL_HTTP_PORT = 47681
-
-
-@pytest.fixture
-def model_url():
-    """Serves MODEL_PATH's directory over local HTTP so the worker's `http`
-    model-src resolver runs for real — the plain-local-path resolver never
-    threads a progress callback through at all, so it's the only way to
-    observe a genuine `modelProgress` event end to end."""
-    handler = functools.partial(
-        http.server.SimpleHTTPRequestHandler, directory=str(MODEL_PATH.parent)
-    )
-    server = http.server.ThreadingHTTPServer(("127.0.0.1", _LOCAL_HTTP_PORT), handler)
-    thread = threading.Thread(target=server.serve_forever, daemon=True)
-    thread.start()
-    try:
-        yield f"http://127.0.0.1:{server.server_port}/{MODEL_PATH.name}"
-    finally:
-        server.shutdown()
-        thread.join(timeout=5)
 
 
 @pytest.fixture
@@ -85,7 +72,7 @@ def transport(worker):
 
 
 def test_load_model_with_progress_streams_real_progress_then_terminal_reply(
-    transport, model_url
+    transport,
 ) -> None:
     from qvac._generated import (
         LoadModelRequest,
@@ -97,7 +84,7 @@ def test_load_model_with_progress_streams_real_progress_then_terminal_reply(
     params = LoadModelRequest.model_validate(
         {
             "type": "loadModel",
-            "modelSrc": model_url,
+            "modelSrc": REGISTRY_MODEL_SRC,
             "modelType": "llamacpp-completion",
             "modelConfig": {},
         }
@@ -117,7 +104,7 @@ def test_load_model_with_progress_streams_real_progress_then_terminal_reply(
 
     assert progress_events, (
         "expected at least one modelProgress event before the terminal reply — "
-        "the http model-src resolver emits one even on a cache hit"
+        "the registry model-src resolver emits one even on a cache hit"
     )
     for event in progress_events:
         assert isinstance(
