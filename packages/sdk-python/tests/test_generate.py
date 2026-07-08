@@ -96,6 +96,29 @@ def test_methods_module_has_one_function_per_manifest_entry_with_matching_shape(
             ], f"{method['name']} is {shape}, expected (transport, params), got {params}"
 
 
+def test_models_registry_module_has_one_constant_per_catalog_entry() -> None:
+    import ast
+
+    catalog = generate.load_models_registry()
+    assert len(catalog) > 0
+
+    rendered = generate.render_models_registry_module(catalog)
+    tree = ast.parse(rendered)
+    assigned_names = {
+        node.targets[0].id
+        for node in tree.body
+        if isinstance(node, ast.Assign)
+        and len(node.targets) == 1
+        and hasattr(node.targets[0], "id")
+    }
+
+    for name, entry in catalog.items():
+        assert name in assigned_names, f"{name} has no generated ModelConstant"
+        assert (
+            name == entry["name"]
+        ), f"{name}: catalog key must match its own name field"
+
+
 def test_progress_capable_methods_get_a_with_progress_stub(
     manifest_methods: list[dict],
 ) -> None:

@@ -60,3 +60,31 @@ def test_state_reply_round_trips_through_generated_stub(transport) -> None:
     response = state(transport, StateRequest(type="state"))
     assert response.type == "state"
     assert response.state is not None
+
+
+def test_model_registry_list_and_search_against_real_worker(transport) -> None:
+    from qvac import api
+
+    all_models = api.model_registry_list(transport)
+    assert len(all_models) > 0
+
+    llm_models = api.model_registry_search(transport, model_type="llm")
+    assert len(llm_models) > 0
+    assert all(model.addon.value == "llm" for model in llm_models)
+
+
+def test_delete_cache_all_against_real_worker(transport) -> None:
+    from qvac import api
+
+    result = api.delete_cache(transport, all=True)
+    assert result == {"success": True}
+
+
+def test_cancel_broad_on_unloaded_model_against_real_worker(transport) -> None:
+    from qvac import api
+
+    # A broad cancel validates the model is loaded (shared with internal
+    # server-side broad cancels, per cancelHandler.ts) -- targeting a model
+    # that was never loaded is a real, expected failure, not a no-op.
+    with pytest.raises(api.CancelFailedError, match="not found"):
+        api.cancel(transport, model_id="no-such-model", kind="completion")

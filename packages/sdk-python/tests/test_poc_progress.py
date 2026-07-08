@@ -31,18 +31,17 @@ TESTS_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(TESTS_DIR))
 sys.path.insert(0, str(TESTS_DIR.parent / "src"))
 
+from qvac.models import QWEN3_600M_INST_Q4  # noqa: E402
+
 DEFAULT_MODEL = str(
     Path.home() / ".qvac" / "models" / "5b8aae816570a09d_Qwen3-0.6B-Q4_0.gguf"
 )
 MODEL_PATH = Path(os.environ.get("QVAC_POC_MODEL", DEFAULT_MODEL))
 
-# QWEN3_600M_INST_Q4 from packages/sdk/models/registry/models.ts — its
-# registryPath hashes (server/utils/formatting.ts's generateShortHash) to
-# `5b8aae816570a09d`, matching MODEL_PATH's cache filename exactly.
-REGISTRY_MODEL_SRC = (
-    "registry://hf/unsloth/Qwen3-0.6B-GGUF/blob/"
-    "50968a4468ef4233ed78cd7c3de230dd1d61a56b/Qwen3-0.6B-Q4_0.gguf"
-)
+# QWEN3_600M_INST_Q4's registryPath hashes (server/utils/formatting.ts's
+# generateShortHash) to `5b8aae816570a09d`, matching MODEL_PATH's cache
+# filename exactly.
+REGISTRY_MODEL_SRC = QWEN3_600M_INST_Q4.src
 
 pytestmark = [
     pytest.mark.skipif(
