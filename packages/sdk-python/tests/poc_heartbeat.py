@@ -1,26 +1,20 @@
 #!/usr/bin/env python3
 """
-QVAC RPC proof-of-concept — talk to the SDK worker from Python.
+QVAC RPC proof-of-concept — bare worker spawn + bare-rpc wire encoding/decoding.
 
-Copied verbatim (path constants only made worktree-portable via env vars)
-from the hand-written PoC used to design the Python client. Used here as
-the test harness for the generated typed surface: `poc_transport.py` adapts
-`QvacWorker` below to the `qvac._transport.Transport` protocol so the
-generated stubs can be smoke-tested against a real running worker ahead of
-the production transport (a separate, not-yet-built task).
-
-A hand-written, minimal stand-in for the eventual generated Python client +
-`qvac._transport` module. It shows how a Python program:
-
-  1. starts the SDK's Bare worker and connects over a Unix socket,
-  2. sends a `bare-rpc` request and reads the reply  (unary  — heartbeat, loadModel),
-  3. reads a `bare-rpc` response stream            (stream — completion tokens).
-
-No HTTP. The worker already runs inference; we just speak its socket protocol.
+`QvacWorker` is deliberately just that: process lifecycle, framing, and the
+three wire call shapes (unary/stream/duplex). Everything method-specific —
+building a typed request, picking the right call shape, parsing the typed
+response — lives in the real package (`qvac._generated.methods`, `qvac.api`,
+`qvac.models`) and is exercised below via `poc_transport.PocTransport`, the
+same adapter the test suite uses. This file is the only thing standing in
+for the not-yet-built production transport (bare-rpc-python); once that
+lands, `QvacWorker` is what it replaces — nothing above it should need to
+change.
 
 RUN:
-  python3 qvac_poc_heartbeat.py                                   # heartbeat only
-  QVAC_POC_MODEL="/path/to/model.gguf" python3 qvac_poc_heartbeat.py   # + loadModel + completion
+  python3 poc_heartbeat.py                                             # heartbeat + a default completion
+  QVAC_POC_MODEL="/path/to/model.gguf" python3 poc_heartbeat.py        # completion against a specific local model
 
 Wire format (bare-rpc: lib/messages.js, lib/constants.js):
   frame          = uint32(len, little-endian) + body
@@ -40,6 +34,13 @@ import tempfile
 import traceback
 import array
 import wave
+from pathlib import Path
+
+_SRC_DIR = str(Path(__file__).resolve().parent.parent / "src")
+if _SRC_DIR not in sys.path:
+    sys.path.insert(0, _SRC_DIR)
+if str(Path(__file__).resolve().parent) not in sys.path:
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 # ============================================================================
 # 0. Where the worker and the Bare runtime live
@@ -292,7 +293,7 @@ class QvacWorker:
             raise RuntimeError("worker: " + _short(obj.get("message", "unknown error")))
         return obj
 
-    # ---- the two call shapes -----------------------------------------------
+    # ---- the three wire call shapes -----------------------------------------
 
     def call(self, payload: dict) -> dict:
         """Unary: send a request, wait for its single reply, return parsed JSON."""
@@ -333,55 +334,6 @@ class QvacWorker:
                 if buffer.strip():
                     yield self._json_or_raise(buffer.encode("utf-8"))
                 return
-
-    # ---- high-level convenience (what a generated client would expose) -----
-
-    def heartbeat(self) -> dict:
-        return self.call({"type": "heartbeat"})
-
-    def load_model(
-        self, model_src, model_type="llamacpp-completion", model_config=None
-    ) -> str:
-        # `modelType` is the CANONICAL engine type (the "llm" alias is normalized
-        # client-side before the wire). Returns the loaded model's id.
-        req = {"type": "loadModel", "modelSrc": model_src, "modelType": model_type}
-        if model_config:
-            req["modelConfig"] = model_config
-        result = self.call(req)
-        if not result.get("success"):
-            raise RuntimeError(f"loadModel failed: {result.get('error')}")
-        return result["modelId"]
-
-    def completion(self, model_id, messages, **generation_params):
-        # stream-type method; yields raw completionStream events
-        # ({"type":"completionStream","events":[...],"done":bool}).
-        req = {
-            "type": "completionStream",
-            "modelId": model_id,
-            "history": messages,
-            "stream": True,
-        }
-        if generation_params:
-            req["generationParams"] = generation_params
-        yield from self.call_stream(req)
-
-    def embed(self, model_id, text):
-        # reply-type method; returns the embedding vector (a single string ->
-        # number[]; a list of strings -> number[][]).
-        result = self.call({"type": "embed", "modelId": model_id, "text": text})
-        if not result.get("success"):
-            raise RuntimeError(f"embed failed: {result.get('error')}")
-        return result["embedding"]
-
-    def transcribe(self, model_id, audio_path):
-        # stream-type method: yields transcribe events ({text, segment, done, ...}).
-        # audioChunk accepts a local file path directly (no base64 needed).
-        req = {
-            "type": "transcribe",
-            "modelId": model_id,
-            "audioChunk": {"type": "filePath", "value": audio_path},
-        }
-        yield from self.call_stream(req)
 
     def _duplex_call(self, payload_obj, up_chunks):
         # DUPLEX: open a client->server request stream (first chunk = the JSON
@@ -426,24 +378,33 @@ class QvacWorker:
                     yield self._json_or_raise(buffer.encode("utf-8"))
                 return
 
-    def transcribe_stream(self, model_id, pcm_chunks, parakeet_config=None):
-        payload = {"type": "transcribeStream", "modelId": model_id}
-        if parakeet_config:
-            payload["parakeetStreamingConfig"] = parakeet_config
-        yield from self._duplex_call(
-            payload, pcm_chunks
-        )  # audio chunks up, transcripts down
-
-    def text_to_speech_stream(self, model_id, text):
-        # duplex TTS: the text to speak is streamed up the request stream; audio
-        # ({buffer:number[]}) comes back down the response stream.
-        payload = {"type": "textToSpeechStream", "modelId": model_id}
-        yield from self._duplex_call(payload, [text.encode("utf-8")])
-
 
 # ============================================================================
-# 3. Demo
+# 3. Demo — everything method-specific goes through the real typed layer
+#    (qvac._generated.methods / qvac.models), via PocTransport(w). QvacWorker
+#    itself is never touched below except to construct the transport.
 # ============================================================================
+
+from poc_transport import PocTransport
+from qvac.models import QWEN3_600M_INST_Q4
+from qvac._generated import (
+    CompletionStreamRequest,
+    EmbedRequest,
+    HeartbeatRequest,
+    LoadModelRequest,
+    TextToSpeechStreamRequest,
+    TranscribeRequest,
+    TranscribeStreamRequest,
+)
+from qvac._generated.methods import (
+    completion_stream,
+    embed,
+    heartbeat,
+    load_model,
+    text_to_speech_stream,
+    transcribe,
+    transcribe_stream,
+)
 
 
 def _dump_failure(w, label, e):
@@ -454,43 +415,83 @@ def _dump_failure(w, label, e):
         print("---- worker logs (tail) ----\n" + _short(logs, 2000), file=sys.stderr)
 
 
+def _load(transport, model_src, model_type, model_config=None):
+    request = LoadModelRequest.model_validate(
+        {
+            "type": "loadModel",
+            "modelSrc": model_src,
+            "modelType": model_type,
+            "modelConfig": model_config or {},
+        }
+    )
+    response = load_model(transport, request)
+    if not response.success:
+        raise RuntimeError(f"loadModel failed: {response.error}")
+    return response.model_id
+
+
 def demo_completion(w, model):
+    transport = PocTransport(w)
     print(f"[loadModel] loading LLM {model} ...")
-    model_id = w.load_model(model)  # canonical llamacpp-completion
+    model_id = _load(transport, model, "llamacpp-completion")
     print(f"[loadModel] -> modelId={model_id!r}\n")
+
     print("[completion] streaming 'Say hello in five words.':")
+    request = CompletionStreamRequest.model_validate(
+        {
+            "type": "completionStream",
+            "modelId": model_id,
+            "history": [{"role": "user", "content": "Say hello in five words."}],
+            "stream": True,
+        }
+    )
     text = ""
-    for resp in w.completion(
-        model_id, [{"role": "user", "content": "Say hello in five words."}]
-    ):
-        for e in resp.get("events", []):
-            if e.get("type") == "contentDelta":
-                text += e["text"]
-                sys.stdout.write(e["text"])
+    for chunk in completion_stream(transport, request):
+        for event in chunk.events:
+            if event.type == "contentDelta":
+                text += event.text
+                sys.stdout.write(event.text)
                 sys.stdout.flush()
     print(f"\n[completion] full text -> {text!r}")
 
 
 def demo_embed(w, model):
+    transport = PocTransport(w)
     print(f"[loadModel] loading embedding model {model} ...")
-    model_id = w.load_model(model, model_type="llamacpp-embedding")
+    model_id = _load(transport, model, "llamacpp-embedding")
     print(f"[loadModel] -> modelId={model_id!r}")
-    vec = w.embed(model_id, "hello world")
+
+    request = EmbedRequest.model_validate(
+        {"type": "embed", "modelId": model_id, "text": "hello world"}
+    )
+    response = embed(transport, request)
+    if not response.success:
+        raise RuntimeError(f"embed failed: {response.error}")
+    vec = response.embedding
     print(
         f"[embed] 'hello world' -> dim={len(vec)}, first 5={[round(x, 4) for x in vec[:5]]}"
     )
 
 
 def demo_transcribe(w, model):
+    transport = PocTransport(w)
     audio = os.environ.get("QVAC_POC_AUDIO", DEFAULT_AUDIO)
     print(f"[loadModel] loading transcription model {model} ...")
-    model_id = w.load_model(model, model_type="parakeet-transcription")
+    model_id = _load(transport, model, "parakeet-transcription")
     print(f"[loadModel] -> modelId={model_id!r}")
     print(f"[transcribe] {audio}:")
+
+    request = TranscribeRequest.model_validate(
+        {
+            "type": "transcribe",
+            "modelId": model_id,
+            "audioChunk": {"type": "filePath", "value": audio},
+        }
+    )
     text = ""
-    for resp in w.transcribe(model_id, audio):
-        if resp.get("text"):
-            text += resp["text"]
+    for response in transcribe(transport, request):
+        if response.text:
+            text += response.text
     print(f"[transcribe] -> {text!r}")
 
 
@@ -526,24 +527,31 @@ def demo_transcribe_stream(w, model):
     # parakeet duplex needs: a TRUE 16 kHz mono f32le stream (resample non-16k with
     # ffmpeg first), 1 s chunks, `emitPartials` so it emits per-chunk text, and
     # ~1.5 s of trailing silence so the stream finalizes.
+    transport = PocTransport(w)
     audio = os.environ.get("QVAC_POC_AUDIO", DEFAULT_AUDIO)
     chunk_ms = 1000
     chunks, rate, fmt = _wav_to_pcm_16k_mono(audio, chunk_ms=chunk_ms, fmt="f32")
     per_chunk = int(rate * chunk_ms / 1000) * 4
     silence = bytes(int(rate * 1.5) * 4)
     chunks += [silence[i : i + per_chunk] for i in range(0, len(silence), per_chunk)]
-    cfg = {"chunkMs": chunk_ms, "emitPartials": True}
+
     print(f"[loadModel] loading transcription model {model} ...")
-    model_id = w.load_model(model, model_type="parakeet-transcription")
+    model_id = _load(transport, model, "parakeet-transcription")
     print(f"[loadModel] -> modelId={model_id!r}")
-    print(
-        f"[transcribeStream] DUPLEX: {rate}Hz mono {fmt}, {len(chunks)} chunks, config={cfg}:"
+    print(f"[transcribeStream] DUPLEX: {rate}Hz mono {fmt}, {len(chunks)} chunks:")
+
+    request = TranscribeStreamRequest.model_validate(
+        {
+            "type": "transcribeStream",
+            "modelId": model_id,
+            "parakeetStreamingConfig": {"chunkMs": chunk_ms, "emitPartials": True},
+        }
     )
     text = ""
-    for resp in w.transcribe_stream(model_id, chunks, parakeet_config=cfg):
+    for response in transcribe_stream(transport, request, chunks):
         if DEBUG:
-            print(f"[event] {resp}", file=sys.stderr)
-        piece = resp.get("text") or (resp.get("segment") or {}).get("text")
+            print(f"[event] {response}", file=sys.stderr)
+        piece = response.text or (response.segment.text if response.segment else None)
         if piece:
             text += piece
             sys.stdout.write(piece)
@@ -567,31 +575,35 @@ def _write_wav(path, samples, rate):
 
 
 def demo_tts_stream(w, model):
+    transport = PocTransport(w)
     text = os.environ.get(
         "QVAC_POC_TTS_TEXT", "Hello from QVAC. This is streaming text to speech."
     )
     print(f"[loadModel] loading TTS model {model} ...")
-    model_id = w.load_model(
+    model_id = _load(
+        transport,
         model,
-        model_type="tts-ggml",
+        "tts-ggml",
         model_config={"ttsEngine": "supertonic", "language": "en"},
     )
     print(f"[loadModel] -> modelId={model_id!r}")
     print(f"[textToSpeechStream] DUPLEX: synthesizing {text!r}")
+
+    request = TextToSpeechStreamRequest.model_validate(
+        {"type": "textToSpeechStream", "modelId": model_id}
+    )
     samples, rate, events = [], None, 0
-    for resp in w.text_to_speech_stream(model_id, text):
+    for response in text_to_speech_stream(transport, request, [text.encode("utf-8")]):
         events += 1
         if DEBUG:
             print(
-                f"[event] keys={list(resp)} buf={len(resp.get('buffer', []))} done={resp.get('done')}",
+                f"[event] buf={len(response.buffer)} done={response.done}",
                 file=sys.stderr,
             )
-        samples.extend(resp.get("buffer", []))
-        st = resp.get("stats") or {}
-        if st.get("totalSamples") and st.get("audioDuration"):
-            cand = st["totalSamples"] / (
-                st["audioDuration"] / 1000
-            )  # audioDuration is ms
+        samples.extend(response.buffer)
+        stats = response.stats
+        if stats and stats.total_samples and stats.audio_duration:
+            cand = stats.total_samples / (stats.audio_duration / 1000)  # ms -> s
             if 8000 <= cand <= 96000:
                 rate = round(cand)
     rate = rate or 44100
@@ -605,24 +617,29 @@ def demo_tts_stream(w, model):
         print(f"[textToSpeechStream] wrote {out} — play it to verify real speech")
 
 
-# capability -> (env var pointing at a model, demo fn). Add cases here one at a time.
+# capability -> (env var pointing at a model, a default modelSrc when unset, demo fn).
+# completion defaults to a real registry constant so the PoC has something to run
+# out of the box; the rest need a local model path since no cached constant exists
+# for them here. Add cases here one at a time.
 CASES = [
-    ("completion", "QVAC_POC_MODEL", demo_completion),
-    ("embed", "QVAC_POC_EMBED_MODEL", demo_embed),
-    ("transcribe", "QVAC_POC_STT_MODEL", demo_transcribe),
-    ("transcribe-stream", "QVAC_POC_STT_STREAM_MODEL", demo_transcribe_stream),
-    ("tts-stream", "QVAC_POC_TTS_MODEL", demo_tts_stream),
+    ("completion", "QVAC_POC_MODEL", QWEN3_600M_INST_Q4.src, demo_completion),
+    ("embed", "QVAC_POC_EMBED_MODEL", None, demo_embed),
+    ("transcribe", "QVAC_POC_STT_MODEL", None, demo_transcribe),
+    ("transcribe-stream", "QVAC_POC_STT_STREAM_MODEL", None, demo_transcribe_stream),
+    ("tts-stream", "QVAC_POC_TTS_MODEL", None, demo_tts_stream),
 ]
 
 
 def main():
     with QvacWorker() as w:
+        transport = PocTransport(w)
         print("[poc] worker connected\n")
-        print(f"[heartbeat] -> {w.heartbeat()}\n")
+        heartbeat_response = heartbeat(transport, HeartbeatRequest(type="heartbeat"))
+        print(f"[heartbeat] -> {heartbeat_response}\n")
 
         ran = False
-        for label, env_var, fn in CASES:
-            model = os.environ.get(env_var)
+        for label, env_var, default, fn in CASES:
+            model = os.environ.get(env_var, default)
             if not model:
                 continue
             ran = True
@@ -634,7 +651,7 @@ def main():
                 raise
         if not ran:
             print(
-                "[poc] set QVAC_POC_MODEL (LLM) / QVAC_POC_EMBED_MODEL (embeddings) to run cases."
+                "[poc] set QVAC_POC_EMBED_MODEL / QVAC_POC_STT_MODEL / etc. to run more cases."
             )
 
 

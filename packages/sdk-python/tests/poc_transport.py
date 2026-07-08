@@ -6,13 +6,17 @@ ahead of the production `bare-rpc-python` transport (not yet built).
 
 from __future__ import annotations
 
-from typing import Any, Iterable, Iterator
+from typing import TYPE_CHECKING, Any, Iterable, Iterator
 
-from poc_heartbeat import QvacWorker
+if TYPE_CHECKING:
+    # Import-time only (see `from __future__ import annotations` above) --
+    # poc_heartbeat.py imports this module's PocTransport for its own demos,
+    # so a real top-level import here would be circular.
+    from poc_heartbeat import QvacWorker
 
 
 class PocTransport:
-    def __init__(self, worker: QvacWorker) -> None:
+    def __init__(self, worker: "QvacWorker") -> None:
         self._worker = worker
 
     def call(self, payload: dict[str, Any]) -> dict[str, Any]:
