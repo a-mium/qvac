@@ -22,6 +22,10 @@ async function runChatterboxSpeedTest (options = {}) { // eslint-disable-line no
   return runIntegrationModule('../integration/chatterbox-speed.test.js', options)
 }
 
+async function runDenoiserBenchTest (options = {}) { // eslint-disable-line no-unused-vars
+  return runIntegrationModule('../integration/denoiser-bench.test.js', options)
+}
+
 async function runGpuSmokeTest (options = {}) { // eslint-disable-line no-unused-vars
   return runIntegrationModule('../integration/gpu-smoke.test.js', options)
 }
@@ -63,6 +67,7 @@ module.exports = {
   runChatterboxKvCacheGpuTest,
   runChatterboxMtlTest,
   runChatterboxSpeedTest,
+  runDenoiserBenchTest,
   runGpuSmokeTest,
   runLavasrEnhancerTest,
   runMultipleRunsTest,

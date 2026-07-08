@@ -1149,3 +1149,7 @@ class TTSGgml {
 module.exports = TTSGgml
 module.exports.ENGINE_CHATTERBOX = ENGINE_CHATTERBOX
 module.exports.ENGINE_SUPERTONIC = ENGINE_SUPERTONIC
+
+// Standalone LavaSR denoiser GPU(OpenCL)-vs-CPU A/B bench (no engine instance).
+// Returns { gpuMs, cpuMs, cosSim, nrmse, twinNrmse, openclRan, n }.
+module.exports.denoiserBench = (modelPath) => require('./binding').denoiserBench(modelPath)

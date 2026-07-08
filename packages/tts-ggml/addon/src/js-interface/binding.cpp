@@ -24,6 +24,10 @@ auto qvac_tts_ggml_exports(js_env_t* env, js_value_t* exports) -> js_value_t* {
   // (IModelAsyncLoad::waitForLoadInitialization) runs on a worker thread.
   V("activate", qvac::ttsggml::addon_js::activate)
 
+  // Standalone LavaSR denoiser GPU-vs-CPU A/B bench (no instance handle); used
+  // by the mobile denoiser-bench integration test to log per-device numbers.
+  V("denoiserBench", qvac::ttsggml::addon_js::denoiserBench)
+
   V("loadWeights", qvac_lib_inference_addon_cpp::JsInterface::loadWeights)
   V("cancel", qvac_lib_inference_addon_cpp::JsInterface::cancel)
   V("destroyInstance",

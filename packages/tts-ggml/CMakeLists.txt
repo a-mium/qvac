@@ -17,6 +17,13 @@ find_package(cmake-vcpkg REQUIRED PATHS node_modules/cmake-vcpkg)
 
 set(VCPKG_OVERLAY_TRIPLETS "${CMAKE_CURRENT_SOURCE_DIR}/../../vcpkg-overlays/triplets;${VCPKG_OVERLAY_TRIPLETS}")
 
+# Overlay the ggml-speech + tts-cpp ports at the pushed LavaSR-denoiser-OpenCL
+# branches so CI builds the fused-op denoiser; drop once the registry lands them.
+# Unquoted trailing expansion: a quoted "...;${VCPKG_OVERLAY_PORTS}" with the var
+# empty leaves a trailing empty element that vcpkg resolves to CWD and rejects this
+# package's own vcpkg.json as a malformed PORT ("missing required field 'name'").
+set(VCPKG_OVERLAY_PORTS "${CMAKE_CURRENT_SOURCE_DIR}/vcpkg-overlay-ports" ${VCPKG_OVERLAY_PORTS})
+
 project(tts-ggml CXX C)
 
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
