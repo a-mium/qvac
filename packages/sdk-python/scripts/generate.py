@@ -49,6 +49,26 @@ def load_manifest_methods() -> list[dict]:
     return json.loads(MANIFEST_PATH.read_text())["methods"]
 
 
+def progress_wire_type(method: dict) -> str | None:
+    """The wire `type` a progress-capable method's progress events carry
+    (e.g. `modelProgress`), taken from the manifest's `progress.responseSchema`
+    ref (`schema.json#/$defs/modelProgress.response`). `None` for methods
+    with no `progress` block."""
+    progress = method.get("progress")
+    if not progress:
+        return None
+    def_name = progress["responseSchema"].rsplit("/", 1)[-1]
+    suffix = ".response"
+    if not def_name.endswith(suffix):
+        raise RuntimeError(f'Unexpected progress responseSchema ref "{def_name}"')
+    return def_name[: -len(suffix)]
+
+
+def progress_response_title(method: dict) -> str | None:
+    wire_type = progress_wire_type(method)
+    return f"{pascal_case(wire_type)}Response" if wire_type else None
+
+
 def run_datamodel_codegen(output_dir: Path) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
     subprocess.run(
@@ -104,28 +124,40 @@ def resolve_titles(
         try:
             models_pkg = importlib.import_module("qvac._generated.models")
             resolved: dict[str, tuple[str | None, str]] = {}
-            for method in manifest_methods:
-                name = method["name"]
-                for attr in ("Request", "Response"):
-                    title = f"{pascal_case(name)}{attr}"
-                    if hasattr(models_pkg, title):
-                        resolved[title] = (None, title)
-                        continue
-                    submodule = None
+
+            def resolve(title: str, method_name: str | None, attr: str | None) -> None:
+                if title in resolved:
+                    return
+                if hasattr(models_pkg, title):
+                    resolved[title] = (None, title)
+                    return
+                if method_name is not None and attr is not None:
                     try:
                         submodule = importlib.import_module(
-                            f"qvac._generated.models.{name}"
+                            f"qvac._generated.models.{method_name}"
                         )
                     except ImportError:
-                        pass
+                        submodule = None
                     if submodule is not None and hasattr(submodule, attr):
-                        resolved[title] = (name, attr)
-                        continue
-                    raise RuntimeError(
-                        f'Could not resolve generated class for "{title}" '
-                        f'(method "{name}"). datamodel-code-generator\'s module-splitting '
-                        "changed shape — extend resolve_titles in scripts/generate.py."
-                    )
+                        resolved[title] = (method_name, attr)
+                        return
+                context = f' (method "{method_name}")' if method_name else ""
+                raise RuntimeError(
+                    f'Could not resolve generated class for "{title}"{context}. '
+                    "datamodel-code-generator's module-splitting changed shape — "
+                    "extend resolve_titles in scripts/generate.py."
+                )
+
+            for method in manifest_methods:
+                name = method["name"]
+                resolve(f"{pascal_case(name)}Request", name, "Request")
+                resolve(f"{pascal_case(name)}Response", name, "Response")
+                progress_title = progress_response_title(method)
+                if progress_title:
+                    # Progress response schemas are shared response-union
+                    # members, not per-method wrapper types, so there's no
+                    # per-method submodule fallback to try for them.
+                    resolve(progress_title, None, None)
             return resolved
         finally:
             sys.path.remove(fake_src)
@@ -189,6 +221,7 @@ def render_methods_module(manifest_methods: list[dict]) -> str:
             for m in manifest_methods
             for attr in ("Request", "Response")
         }
+        | {title for m in manifest_methods if (title := progress_response_title(m))}
     )
     for title in all_titles:
         lines.append(f"    {title},")
@@ -228,6 +261,44 @@ def render_methods_module(manifest_methods: list[dict]) -> str:
             lines.append("    for chunk in transport.call_duplex(payload, up):")
             lines.append(f"        yield {response_title}.model_validate(chunk)")
         lines.append("")
+
+        wire_type = progress_wire_type(method)
+        if wire_type:
+            if shape != "reply":
+                raise RuntimeError(
+                    f'Method "{name}" has a progress block but call shape "{shape}" — '
+                    "extend render_methods_module in scripts/generate.py to handle it."
+                )
+            progress_title = progress_response_title(method)
+            lines.append("")
+            lines.append(
+                f"def {func_name}_with_progress(\n"
+                f"    transport: Transport, params: {request_title}\n"
+                f") -> Iterator[{progress_title} | {response_title}]:"
+            )
+            lines.append(
+                "    # Progress events and the terminal reply both arrive through the"
+            )
+            lines.append(
+                "    # same stream, distinguished only by each payload's own `type` —"
+            )
+            lines.append(
+                "    # call_stream already falls back cleanly to a single terminal"
+            )
+            lines.append(
+                "    # chunk if the server ends up replying unary instead (e.g. an"
+            )
+            lines.append(
+                "    # operation that doesn't support progress for this method)."
+            )
+            lines.append(f"    payload = {dump}")
+            lines.append("    payload['withProgress'] = True")
+            lines.append("    for chunk in transport.call_stream(payload):")
+            lines.append(f"        if chunk.get('type') == {wire_type!r}:")
+            lines.append(f"            yield {progress_title}.model_validate(chunk)")
+            lines.append("        else:")
+            lines.append(f"            yield {response_title}.model_validate(chunk)")
+            lines.append("")
     return "\n".join(lines)
 
 

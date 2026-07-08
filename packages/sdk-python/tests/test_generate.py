@@ -94,3 +94,43 @@ def test_methods_module_has_one_function_per_manifest_entry_with_matching_shape(
                 "transport",
                 "params",
             ], f"{method['name']} is {shape}, expected (transport, params), got {params}"
+
+
+def test_progress_capable_methods_get_a_with_progress_stub(
+    manifest_methods: list[dict],
+) -> None:
+    import ast
+
+    rendered = generate.render_methods_module(manifest_methods)
+    tree = ast.parse(rendered)
+    functions_by_name = {
+        node.name: node for node in ast.walk(tree) if isinstance(node, ast.FunctionDef)
+    }
+
+    progress_methods = {m["name"] for m in manifest_methods if m.get("progress")}
+    assert progress_methods == {"loadModel", "downloadAsset", "rag", "finetune"}
+
+    for method in manifest_methods:
+        name = method["name"]
+        progress_func_name = f"{generate.snake_case(name)}_with_progress"
+        if name not in progress_methods:
+            assert (
+                progress_func_name not in functions_by_name
+            ), f"{name} has no progress block but got a {progress_func_name} stub"
+            continue
+
+        assert (
+            progress_func_name in functions_by_name
+        ), f"missing progress stub for {name}"
+        func = functions_by_name[progress_func_name]
+        params = [arg.arg for arg in func.args.args]
+        assert params == [
+            "transport",
+            "params",
+        ], f"{progress_func_name} params: {params}"
+
+        source = ast.unparse(func)
+        assert "transport.call_stream(payload)" in source
+        assert "payload['withProgress'] = True" in source
+        assert generate.progress_response_title(method) in source
+        assert f"{generate.pascal_case(name)}Response" in source

@@ -630,11 +630,40 @@ class CompletionStreamResponseEventsItemCompletionStats(BaseModel):
     )
 
 
-class CompletionStreamResponseEventsItemCompletionDoneError(BaseModel):
+class CompletionStreamResponseEventsItemCompletionDoneErrorError(BaseModel):
     model_config = ConfigDict(
         extra='forbid',
     )
     message: str
+
+
+class CompletionStreamResponseEventsItemCompletionDoneErrorRaw(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    full_text: str = Field(..., alias='fullText')
+
+
+class CompletionStreamResponseEventsItemCompletionDoneError(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    type: Literal['completionDone']
+    seq: conint(ge=0, le=9007199254740991)
+    stop_reason: Literal['error'] = Field(..., alias='stopReason')
+    error: CompletionStreamResponseEventsItemCompletionDoneErrorError = Field(
+        ..., title='CompletionStreamResponseEventsItemCompletionDoneErrorError'
+    )
+    raw: CompletionStreamResponseEventsItemCompletionDoneErrorRaw | None = Field(
+        None, title='CompletionStreamResponseEventsItemCompletionDoneErrorRaw'
+    )
+
+
+class CompletionStreamResponseEventsItemCompletionDoneStopReason(Enum):
+    eos = 'eos'
+    length = 'length'
+    stop_sequence = 'stopSequence'
+    cancelled = 'cancelled'
 
 
 class CompletionStreamResponseEventsItemCompletionDoneRaw(BaseModel):
@@ -650,35 +679,6 @@ class CompletionStreamResponseEventsItemCompletionDone(BaseModel):
     )
     type: Literal['completionDone']
     seq: conint(ge=0, le=9007199254740991)
-    stop_reason: Literal['error'] = Field(..., alias='stopReason')
-    error: CompletionStreamResponseEventsItemCompletionDoneError = Field(
-        ..., title='CompletionStreamResponseEventsItemCompletionDoneError'
-    )
-    raw: CompletionStreamResponseEventsItemCompletionDoneRaw | None = Field(
-        None, title='CompletionStreamResponseEventsItemCompletionDoneRaw'
-    )
-
-
-class CompletionStreamResponseEventsItemCompletionDoneStopReason(Enum):
-    eos = 'eos'
-    length = 'length'
-    stop_sequence = 'stopSequence'
-    cancelled = 'cancelled'
-
-
-class CompletionStreamResponseEventsItemCompletionDoneRaw2(BaseModel):
-    model_config = ConfigDict(
-        extra='forbid',
-    )
-    full_text: str = Field(..., alias='fullText')
-
-
-class CompletionStreamResponseEventsItemCompletionDone2(BaseModel):
-    model_config = ConfigDict(
-        extra='forbid',
-    )
-    type: Literal['completionDone']
-    seq: conint(ge=0, le=9007199254740991)
     stop_reason: CompletionStreamResponseEventsItemCompletionDoneStopReason | None = (
         Field(
             None,
@@ -686,8 +686,8 @@ class CompletionStreamResponseEventsItemCompletionDone2(BaseModel):
             title='CompletionStreamResponseEventsItemCompletionDoneStopReason',
         )
     )
-    raw: CompletionStreamResponseEventsItemCompletionDoneRaw2 | None = Field(
-        None, title='CompletionStreamResponseEventsItemCompletionDoneRaw2'
+    raw: CompletionStreamResponseEventsItemCompletionDoneRaw | None = Field(
+        None, title='CompletionStreamResponseEventsItemCompletionDoneRaw'
     )
 
 
@@ -704,8 +704,8 @@ class CompletionStreamResponse(BaseModel):
         | CompletionStreamResponseEventsItemToolCall
         | CompletionStreamResponseEventsItemToolError
         | CompletionStreamResponseEventsItemCompletionStats
+        | CompletionStreamResponseEventsItemCompletionDoneError
         | CompletionStreamResponseEventsItemCompletionDone
-        | CompletionStreamResponseEventsItemCompletionDone2
     ]
 
 
@@ -774,7 +774,7 @@ class InitImage(
     )
 
 
-class DiffusionStreamRequestUpscale2(BaseModel):
+class DiffusionStreamRequestUpscale(BaseModel):
     model_config = ConfigDict(
         extra='forbid',
     )
@@ -869,7 +869,7 @@ class DiffusionStreamRequest(BaseModel):
         None,
         description='img2img denoising strength (0.0 = keep source, 1.0 = ignore source); used by the SD/SDXL SDEdit path. No-op for FLUX.2, which uses in-context conditioning and ignores this field.',
     )
-    upscale: bool | DiffusionStreamRequestUpscale2 | None = Field(
+    upscale: bool | DiffusionStreamRequestUpscale | None = Field(
         None,
         description="Post-generation ESRGAN upscale. `true` (or `{}` / `{ repeats: 1 }`) runs a single upscale pass at the model's native scale factor (e.g. x4 for RealESRGAN_x4plus). `false` is a no-op (same as omitting the field). `{ repeats: N }` runs the upscaler N times sequentially — each pass multiplies the output dimensions by the model's scale factor. When `batch_count > 1`, every output image is upscaled independently. Requires the model to be loaded with `upscaler.model_src` set in modelConfig.",
     )
@@ -1584,7 +1584,7 @@ class HeartbeatResponse(BaseModel):
     number: float
 
 
-class LoadModelBySrcRequestLlamacppCompletionDelegate(BaseModel):
+class LoadModelSrcRequestLlamacppCompletionDelegate(BaseModel):
     provider_public_key: constr(pattern=r'^[0-9a-fA-F]{64}$') = Field(
         ...,
         alias='providerPublicKey',
@@ -1617,23 +1617,23 @@ class Verbosity(IntEnum):
     integer_3 = 3
 
 
-class LoadModelBySrcRequestLlamacppCompletionModelConfigToolsMode(Enum):
+class LoadModelSrcRequestLlamacppCompletionModelConfigToolsMode(Enum):
     static = 'static'
     dynamic = 'dynamic'
 
 
-class LoadModelBySrcRequestLlamacppCompletionModelConfigMainGpu2(Enum):
+class LoadModelSrcRequestLlamacppCompletionModelConfigMainGpu(Enum):
     integrated = 'integrated'
     dedicated = 'dedicated'
 
 
-class LoadModelBySrcRequestLlamacppCompletionModelConfigSplitMode(Enum):
+class LoadModelSrcRequestLlamacppCompletionModelConfigSplitMode(Enum):
     none = 'none'
     layer = 'layer'
     row = 'row'
 
 
-class LoadModelBySrcRequestLlamacppCompletionModelConfigProjectionModelSrc2Addon1(Enum):
+class LoadModelSrcRequestLlamacppCompletionModelConfigProjectionModelSrcAddon(Enum):
     llamacpp_completion = 'llamacpp-completion'
     whispercpp_transcription = 'whispercpp-transcription'
     bci_whispercpp_transcription = 'bci-whispercpp-transcription'
@@ -1659,7 +1659,7 @@ class LoadModelBySrcRequestLlamacppCompletionModelConfigProjectionModelSrc2Addon
     classification = 'classification'
 
 
-class LoadModelBySrcRequestLlamacppCompletionModelConfigProjectionModelSrc2(BaseModel):
+class LoadModelSrcRequestLlamacppCompletionModelConfigProjectionModelSrc(BaseModel):
     src: str
     name: str | None = None
     model_id: str | None = Field(None, alias='modelId')
@@ -1671,19 +1671,19 @@ class LoadModelBySrcRequestLlamacppCompletionModelConfigProjectionModelSrc2(Base
     expected_size: float | None = Field(None, alias='expectedSize')
     sha256_checksum: str | None = Field(None, alias='sha256Checksum')
     addon: (
-        LoadModelBySrcRequestLlamacppCompletionModelConfigProjectionModelSrc2Addon1
+        LoadModelSrcRequestLlamacppCompletionModelConfigProjectionModelSrcAddon
         | Literal['vad']
         | None
     ) = None
 
 
-class LoadModelBySrcRequestLlamacppCompletionModelConfigImageTileMode(Enum):
+class LoadModelSrcRequestLlamacppCompletionModelConfigImageTileMode(Enum):
     disabled = 'disabled'
     batched = 'batched'
     sequential = 'sequential'
 
 
-class LoadModelBySrcRequestLlamacppCompletionModelConfig(BaseModel):
+class LoadModelSrcRequestLlamacppCompletionModelConfig(BaseModel):
     ctx_size: float | None = None
     temp: confloat(ge=0.0, le=2.0) | None = None
     top_p: confloat(ge=0.0, le=1.0) | None = None
@@ -1702,44 +1702,42 @@ class LoadModelBySrcRequestLlamacppCompletionModelConfig(BaseModel):
     stop_sequences: list[str] | None = None
     n_discarded: float | None = None
     tools: bool | None = None
-    tools_mode: LoadModelBySrcRequestLlamacppCompletionModelConfigToolsMode | None = (
+    tools_mode: LoadModelSrcRequestLlamacppCompletionModelConfigToolsMode | None = (
         Field(
             None,
             alias='toolsMode',
             description='Controls tool placement in the prompt. "static" (default) prepends the tool set once and reuses it across the session. "dynamic" anchors tools after the last user message and trims them from the kv-cache after the chain resolves so each user prompt can carry its own tools.',
-            title='LoadModelBySrcRequestLlamacppCompletionModelConfigToolsMode',
+            title='LoadModelSrcRequestLlamacppCompletionModelConfigToolsMode',
         )
     )
     cache_type_k: str | None = Field(None, alias='cache-type-k')
     cache_type_v: str | None = Field(None, alias='cache-type-v')
     main_gpu: (
         conint(ge=0, le=9007199254740991)
-        | LoadModelBySrcRequestLlamacppCompletionModelConfigMainGpu2
+        | LoadModelSrcRequestLlamacppCompletionModelConfigMainGpu
         | None
     ) = Field(None, alias='main-gpu')
-    split_mode: LoadModelBySrcRequestLlamacppCompletionModelConfigSplitMode | None = (
+    split_mode: LoadModelSrcRequestLlamacppCompletionModelConfigSplitMode | None = (
         Field(
             None,
             alias='split-mode',
-            title='LoadModelBySrcRequestLlamacppCompletionModelConfigSplitMode',
+            title='LoadModelSrcRequestLlamacppCompletionModelConfigSplitMode',
         )
     )
     tensor_split: str | None = Field(None, alias='tensor-split')
     opencl_cache_dir: str | None = Field(None, alias='openclCacheDir')
     reasoning_budget: conint(ge=-1, le=2147483647) | None = None
     projection_model_src: (
-        str
-        | LoadModelBySrcRequestLlamacppCompletionModelConfigProjectionModelSrc2
-        | None
+        str | LoadModelSrcRequestLlamacppCompletionModelConfigProjectionModelSrc | None
     ) = Field(None, alias='projectionModelSrc')
     image_tile_mode: (
-        LoadModelBySrcRequestLlamacppCompletionModelConfigImageTileMode | None
+        LoadModelSrcRequestLlamacppCompletionModelConfigImageTileMode | None
     ) = Field(
-        None, title='LoadModelBySrcRequestLlamacppCompletionModelConfigImageTileMode'
+        None, title='LoadModelSrcRequestLlamacppCompletionModelConfigImageTileMode'
     )
 
 
-class LoadModelBySrcRequestLlamacppCompletion(BaseModel):
+class LoadModelSrcRequestLlamacppCompletion(BaseModel):
     model_config = ConfigDict(
         extra='forbid',
     )
@@ -1748,8 +1746,8 @@ class LoadModelBySrcRequestLlamacppCompletion(BaseModel):
     model_name: str | None = Field(None, alias='modelName')
     with_progress: bool | None = Field(None, alias='withProgress')
     seed: bool | None = None
-    delegate: LoadModelBySrcRequestLlamacppCompletionDelegate | None = Field(
-        None, title='LoadModelBySrcRequestLlamacppCompletionDelegate'
+    delegate: LoadModelSrcRequestLlamacppCompletionDelegate | None = Field(
+        None, title='LoadModelSrcRequestLlamacppCompletionDelegate'
     )
     request_id: constr(min_length=1) | None = Field(
         None,
@@ -1757,14 +1755,14 @@ class LoadModelBySrcRequestLlamacppCompletion(BaseModel):
         description='Stable identifier for this in-flight load, generated by the client at call time. Optional on the wire so legacy clients keep working — the server falls back to a server-generated id when the field is missing. Exposed on the client-side decorated promise so callers can target this load with `cancel({ requestId })`.',
     )
     model_type: Literal['llamacpp-completion'] = Field(..., alias='modelType')
-    model_config_: LoadModelBySrcRequestLlamacppCompletionModelConfig = Field(
+    model_config_: LoadModelSrcRequestLlamacppCompletionModelConfig = Field(
         ...,
         alias='modelConfig',
-        title='LoadModelBySrcRequestLlamacppCompletionModelConfig',
+        title='LoadModelSrcRequestLlamacppCompletionModelConfig',
     )
 
 
-class LoadModelBySrcRequestWhispercppTranscriptionDelegate(BaseModel):
+class LoadModelSrcRequestWhispercppTranscriptionDelegate(BaseModel):
     provider_public_key: constr(pattern=r'^[0-9a-fA-F]{64}$') = Field(
         ...,
         alias='providerPublicKey',
@@ -1790,12 +1788,12 @@ class LoadModelBySrcRequestWhispercppTranscriptionDelegate(BaseModel):
     )
 
 
-class LoadModelBySrcRequestWhispercppTranscriptionModelConfigStrategy(Enum):
+class LoadModelSrcRequestWhispercppTranscriptionModelConfigStrategy(Enum):
     greedy = 'greedy'
     beam_search = 'beam_search'
 
 
-class LoadModelBySrcRequestWhispercppTranscriptionModelConfigVadParams(BaseModel):
+class LoadModelSrcRequestWhispercppTranscriptionModelConfigVadParams(BaseModel):
     threshold: float | None = None
     min_speech_duration_ms: float | None = None
     min_silence_duration_ms: float | None = None
@@ -1804,23 +1802,23 @@ class LoadModelBySrcRequestWhispercppTranscriptionModelConfigVadParams(BaseModel
     samples_overlap: float | None = None
 
 
-class LoadModelBySrcRequestWhispercppTranscriptionModelConfigAudioFormat(Enum):
+class LoadModelSrcRequestWhispercppTranscriptionModelConfigAudioFormat(Enum):
     f32le = 'f32le'
     s16le = 's16le'
 
 
-class LoadModelBySrcRequestWhispercppTranscriptionModelConfigContextParams(BaseModel):
+class LoadModelSrcRequestWhispercppTranscriptionModelConfigContextParams(BaseModel):
     model: str | None = None
     use_gpu: bool | None = None
     flash_attn: bool | None = None
     gpu_device: float | None = None
 
 
-class LoadModelBySrcRequestWhispercppTranscriptionModelConfigMiscConfig(BaseModel):
+class LoadModelSrcRequestWhispercppTranscriptionModelConfigMiscConfig(BaseModel):
     caption_enabled: bool | None = None
 
 
-class LoadModelBySrcRequestWhispercppTranscriptionModelConfigVadModelSrc2Addon1(Enum):
+class LoadModelSrcRequestWhispercppTranscriptionModelConfigVadModelSrcAddon(Enum):
     llamacpp_completion = 'llamacpp-completion'
     whispercpp_transcription = 'whispercpp-transcription'
     bci_whispercpp_transcription = 'bci-whispercpp-transcription'
@@ -1846,7 +1844,7 @@ class LoadModelBySrcRequestWhispercppTranscriptionModelConfigVadModelSrc2Addon1(
     classification = 'classification'
 
 
-class LoadModelBySrcRequestWhispercppTranscriptionModelConfigVadModelSrc2(BaseModel):
+class LoadModelSrcRequestWhispercppTranscriptionModelConfigVadModelSrc(BaseModel):
     src: str
     name: str | None = None
     model_id: str | None = Field(None, alias='modelId')
@@ -1858,17 +1856,16 @@ class LoadModelBySrcRequestWhispercppTranscriptionModelConfigVadModelSrc2(BaseMo
     expected_size: float | None = Field(None, alias='expectedSize')
     sha256_checksum: str | None = Field(None, alias='sha256Checksum')
     addon: (
-        LoadModelBySrcRequestWhispercppTranscriptionModelConfigVadModelSrc2Addon1
+        LoadModelSrcRequestWhispercppTranscriptionModelConfigVadModelSrcAddon
         | Literal['vad']
         | None
     ) = None
 
 
-class LoadModelBySrcRequestWhispercppTranscriptionModelConfig(BaseModel):
-    strategy: LoadModelBySrcRequestWhispercppTranscriptionModelConfigStrategy | None = (
+class LoadModelSrcRequestWhispercppTranscriptionModelConfig(BaseModel):
+    strategy: LoadModelSrcRequestWhispercppTranscriptionModelConfigStrategy | None = (
         Field(
-            None,
-            title='LoadModelBySrcRequestWhispercppTranscriptionModelConfigStrategy',
+            None, title='LoadModelSrcRequestWhispercppTranscriptionModelConfigStrategy'
         )
     )
     n_threads: conint(ge=-9007199254740991, le=9007199254740991) | None = None
@@ -1908,35 +1905,35 @@ class LoadModelBySrcRequestWhispercppTranscriptionModelConfig(BaseModel):
         None
     )
     vad_params: (
-        LoadModelBySrcRequestWhispercppTranscriptionModelConfigVadParams | None
+        LoadModelSrcRequestWhispercppTranscriptionModelConfigVadParams | None
     ) = Field(
-        None, title='LoadModelBySrcRequestWhispercppTranscriptionModelConfigVadParams'
+        None, title='LoadModelSrcRequestWhispercppTranscriptionModelConfigVadParams'
     )
     audio_format: (
-        LoadModelBySrcRequestWhispercppTranscriptionModelConfigAudioFormat | None
+        LoadModelSrcRequestWhispercppTranscriptionModelConfigAudioFormat | None
     ) = Field(
-        None, title='LoadModelBySrcRequestWhispercppTranscriptionModelConfigAudioFormat'
+        None, title='LoadModelSrcRequestWhispercppTranscriptionModelConfigAudioFormat'
     )
     context_params: (
-        LoadModelBySrcRequestWhispercppTranscriptionModelConfigContextParams | None
+        LoadModelSrcRequestWhispercppTranscriptionModelConfigContextParams | None
     ) = Field(
         None,
         alias='contextParams',
-        title='LoadModelBySrcRequestWhispercppTranscriptionModelConfigContextParams',
+        title='LoadModelSrcRequestWhispercppTranscriptionModelConfigContextParams',
     )
     misc_config: (
-        LoadModelBySrcRequestWhispercppTranscriptionModelConfigMiscConfig | None
+        LoadModelSrcRequestWhispercppTranscriptionModelConfigMiscConfig | None
     ) = Field(
         None,
         alias='miscConfig',
-        title='LoadModelBySrcRequestWhispercppTranscriptionModelConfigMiscConfig',
+        title='LoadModelSrcRequestWhispercppTranscriptionModelConfigMiscConfig',
     )
     vad_model_src: (
-        str | LoadModelBySrcRequestWhispercppTranscriptionModelConfigVadModelSrc2 | None
+        str | LoadModelSrcRequestWhispercppTranscriptionModelConfigVadModelSrc | None
     ) = Field(None, alias='vadModelSrc')
 
 
-class LoadModelBySrcRequestWhispercppTranscription(BaseModel):
+class LoadModelSrcRequestWhispercppTranscription(BaseModel):
     model_config = ConfigDict(
         extra='forbid',
     )
@@ -1945,8 +1942,8 @@ class LoadModelBySrcRequestWhispercppTranscription(BaseModel):
     model_name: str | None = Field(None, alias='modelName')
     with_progress: bool | None = Field(None, alias='withProgress')
     seed: bool | None = None
-    delegate: LoadModelBySrcRequestWhispercppTranscriptionDelegate | None = Field(
-        None, title='LoadModelBySrcRequestWhispercppTranscriptionDelegate'
+    delegate: LoadModelSrcRequestWhispercppTranscriptionDelegate | None = Field(
+        None, title='LoadModelSrcRequestWhispercppTranscriptionDelegate'
     )
     request_id: constr(min_length=1) | None = Field(
         None,
@@ -1954,14 +1951,14 @@ class LoadModelBySrcRequestWhispercppTranscription(BaseModel):
         description='Stable identifier for this in-flight load, generated by the client at call time. Optional on the wire so legacy clients keep working — the server falls back to a server-generated id when the field is missing. Exposed on the client-side decorated promise so callers can target this load with `cancel({ requestId })`.',
     )
     model_type: Literal['whispercpp-transcription'] = Field(..., alias='modelType')
-    model_config_: LoadModelBySrcRequestWhispercppTranscriptionModelConfig = Field(
+    model_config_: LoadModelSrcRequestWhispercppTranscriptionModelConfig = Field(
         ...,
         alias='modelConfig',
-        title='LoadModelBySrcRequestWhispercppTranscriptionModelConfig',
+        title='LoadModelSrcRequestWhispercppTranscriptionModelConfig',
     )
 
 
-class LoadModelBySrcRequestBciWhispercppTranscriptionDelegate(BaseModel):
+class LoadModelSrcRequestBciWhispercppTranscriptionDelegate(BaseModel):
     provider_public_key: constr(pattern=r'^[0-9a-fA-F]{64}$') = Field(
         ...,
         alias='providerPublicKey',
@@ -1987,9 +1984,7 @@ class LoadModelBySrcRequestBciWhispercppTranscriptionDelegate(BaseModel):
     )
 
 
-class LoadModelBySrcRequestBciWhispercppTranscriptionModelConfigWhisperConfig(
-    BaseModel
-):
+class LoadModelSrcRequestBciWhispercppTranscriptionModelConfigWhisperConfig(BaseModel):
     language: str | None = None
     n_threads: conint(ge=-9007199254740991, le=9007199254740991) | None = None
     temperature: float | None = None
@@ -2010,24 +2005,22 @@ class LoadModelBySrcRequestBciWhispercppTranscriptionModelConfigWhisperConfig(
     )
 
 
-class LoadModelBySrcRequestBciWhispercppTranscriptionModelConfigBciConfig(BaseModel):
+class LoadModelSrcRequestBciWhispercppTranscriptionModelConfigBciConfig(BaseModel):
     day_idx: conint(ge=-9007199254740991, le=9007199254740991) | None = None
 
 
-class LoadModelBySrcRequestBciWhispercppTranscriptionModelConfigContextParams(
-    BaseModel
-):
+class LoadModelSrcRequestBciWhispercppTranscriptionModelConfigContextParams(BaseModel):
     model: str | None = None
     use_gpu: bool | None = None
     flash_attn: bool | None = None
     gpu_device: float | None = None
 
 
-class LoadModelBySrcRequestBciWhispercppTranscriptionModelConfigMiscConfig(BaseModel):
+class LoadModelSrcRequestBciWhispercppTranscriptionModelConfigMiscConfig(BaseModel):
     caption_enabled: bool | None = None
 
 
-class LoadModelBySrcRequestBciWhispercppTranscriptionModelConfigEmbedderModelSrc2Addon1(
+class LoadModelSrcRequestBciWhispercppTranscriptionModelConfigEmbedderModelSrcAddon(
     Enum
 ):
     llamacpp_completion = 'llamacpp-completion'
@@ -2055,7 +2048,7 @@ class LoadModelBySrcRequestBciWhispercppTranscriptionModelConfigEmbedderModelSrc
     classification = 'classification'
 
 
-class LoadModelBySrcRequestBciWhispercppTranscriptionModelConfigEmbedderModelSrc2(
+class LoadModelSrcRequestBciWhispercppTranscriptionModelConfigEmbedderModelSrc(
     BaseModel
 ):
     src: str
@@ -2069,50 +2062,50 @@ class LoadModelBySrcRequestBciWhispercppTranscriptionModelConfigEmbedderModelSrc
     expected_size: float | None = Field(None, alias='expectedSize')
     sha256_checksum: str | None = Field(None, alias='sha256Checksum')
     addon: (
-        LoadModelBySrcRequestBciWhispercppTranscriptionModelConfigEmbedderModelSrc2Addon1
+        LoadModelSrcRequestBciWhispercppTranscriptionModelConfigEmbedderModelSrcAddon
         | Literal['vad']
         | None
     ) = None
 
 
-class LoadModelBySrcRequestBciWhispercppTranscriptionModelConfig(BaseModel):
+class LoadModelSrcRequestBciWhispercppTranscriptionModelConfig(BaseModel):
     whisper_config: (
-        LoadModelBySrcRequestBciWhispercppTranscriptionModelConfigWhisperConfig | None
+        LoadModelSrcRequestBciWhispercppTranscriptionModelConfigWhisperConfig | None
     ) = Field(
         None,
         alias='whisperConfig',
-        title='LoadModelBySrcRequestBciWhispercppTranscriptionModelConfigWhisperConfig',
+        title='LoadModelSrcRequestBciWhispercppTranscriptionModelConfigWhisperConfig',
     )
     bci_config: (
-        LoadModelBySrcRequestBciWhispercppTranscriptionModelConfigBciConfig | None
+        LoadModelSrcRequestBciWhispercppTranscriptionModelConfigBciConfig | None
     ) = Field(
         None,
         alias='bciConfig',
-        title='LoadModelBySrcRequestBciWhispercppTranscriptionModelConfigBciConfig',
+        title='LoadModelSrcRequestBciWhispercppTranscriptionModelConfigBciConfig',
     )
     context_params: (
-        LoadModelBySrcRequestBciWhispercppTranscriptionModelConfigContextParams | None
+        LoadModelSrcRequestBciWhispercppTranscriptionModelConfigContextParams | None
     ) = Field(
         None,
         alias='contextParams',
-        title='LoadModelBySrcRequestBciWhispercppTranscriptionModelConfigContextParams',
+        title='LoadModelSrcRequestBciWhispercppTranscriptionModelConfigContextParams',
     )
     misc_config: (
-        LoadModelBySrcRequestBciWhispercppTranscriptionModelConfigMiscConfig | None
+        LoadModelSrcRequestBciWhispercppTranscriptionModelConfigMiscConfig | None
     ) = Field(
         None,
         alias='miscConfig',
-        title='LoadModelBySrcRequestBciWhispercppTranscriptionModelConfigMiscConfig',
+        title='LoadModelSrcRequestBciWhispercppTranscriptionModelConfigMiscConfig',
     )
     backends_dir: str | None = Field(None, alias='backendsDir')
     embedder_model_src: (
         str
-        | LoadModelBySrcRequestBciWhispercppTranscriptionModelConfigEmbedderModelSrc2
+        | LoadModelSrcRequestBciWhispercppTranscriptionModelConfigEmbedderModelSrc
         | None
     ) = Field(None, alias='embedderModelSrc')
 
 
-class LoadModelBySrcRequestBciWhispercppTranscription(BaseModel):
+class LoadModelSrcRequestBciWhispercppTranscription(BaseModel):
     model_config = ConfigDict(
         extra='forbid',
     )
@@ -2121,8 +2114,8 @@ class LoadModelBySrcRequestBciWhispercppTranscription(BaseModel):
     model_name: str | None = Field(None, alias='modelName')
     with_progress: bool | None = Field(None, alias='withProgress')
     seed: bool | None = None
-    delegate: LoadModelBySrcRequestBciWhispercppTranscriptionDelegate | None = Field(
-        None, title='LoadModelBySrcRequestBciWhispercppTranscriptionDelegate'
+    delegate: LoadModelSrcRequestBciWhispercppTranscriptionDelegate | None = Field(
+        None, title='LoadModelSrcRequestBciWhispercppTranscriptionDelegate'
     )
     request_id: constr(min_length=1) | None = Field(
         None,
@@ -2130,14 +2123,14 @@ class LoadModelBySrcRequestBciWhispercppTranscription(BaseModel):
         description='Stable identifier for this in-flight load, generated by the client at call time. Optional on the wire so legacy clients keep working — the server falls back to a server-generated id when the field is missing. Exposed on the client-side decorated promise so callers can target this load with `cancel({ requestId })`.',
     )
     model_type: Literal['bci-whispercpp-transcription'] = Field(..., alias='modelType')
-    model_config_: LoadModelBySrcRequestBciWhispercppTranscriptionModelConfig = Field(
+    model_config_: LoadModelSrcRequestBciWhispercppTranscriptionModelConfig = Field(
         ...,
         alias='modelConfig',
-        title='LoadModelBySrcRequestBciWhispercppTranscriptionModelConfig',
+        title='LoadModelSrcRequestBciWhispercppTranscriptionModelConfig',
     )
 
 
-class LoadModelBySrcRequestParakeetTranscriptionDelegate(BaseModel):
+class LoadModelSrcRequestParakeetTranscriptionDelegate(BaseModel):
     provider_public_key: constr(pattern=r'^[0-9a-fA-F]{64}$') = Field(
         ...,
         alias='providerPublicKey',
@@ -2163,7 +2156,7 @@ class LoadModelBySrcRequestParakeetTranscriptionDelegate(BaseModel):
     )
 
 
-class LoadModelBySrcRequestParakeetTranscriptionModelConfig(BaseModel):
+class LoadModelSrcRequestParakeetTranscriptionModelConfig(BaseModel):
     model_config = ConfigDict(
         extra='forbid',
     )
@@ -2224,7 +2217,7 @@ class LoadModelBySrcRequestParakeetTranscriptionModelConfig(BaseModel):
     model_type: Any | None = Field(None, alias='modelType')
 
 
-class LoadModelBySrcRequestParakeetTranscription(BaseModel):
+class LoadModelSrcRequestParakeetTranscription(BaseModel):
     model_config = ConfigDict(
         extra='forbid',
     )
@@ -2233,8 +2226,8 @@ class LoadModelBySrcRequestParakeetTranscription(BaseModel):
     model_name: str | None = Field(None, alias='modelName')
     with_progress: bool | None = Field(None, alias='withProgress')
     seed: bool | None = None
-    delegate: LoadModelBySrcRequestParakeetTranscriptionDelegate | None = Field(
-        None, title='LoadModelBySrcRequestParakeetTranscriptionDelegate'
+    delegate: LoadModelSrcRequestParakeetTranscriptionDelegate | None = Field(
+        None, title='LoadModelSrcRequestParakeetTranscriptionDelegate'
     )
     request_id: constr(min_length=1) | None = Field(
         None,
@@ -2242,14 +2235,14 @@ class LoadModelBySrcRequestParakeetTranscription(BaseModel):
         description='Stable identifier for this in-flight load, generated by the client at call time. Optional on the wire so legacy clients keep working — the server falls back to a server-generated id when the field is missing. Exposed on the client-side decorated promise so callers can target this load with `cancel({ requestId })`.',
     )
     model_type: Literal['parakeet-transcription'] = Field(..., alias='modelType')
-    model_config_: LoadModelBySrcRequestParakeetTranscriptionModelConfig | None = Field(
+    model_config_: LoadModelSrcRequestParakeetTranscriptionModelConfig | None = Field(
         None,
         alias='modelConfig',
-        title='LoadModelBySrcRequestParakeetTranscriptionModelConfig',
+        title='LoadModelSrcRequestParakeetTranscriptionModelConfig',
     )
 
 
-class LoadModelBySrcRequestLlamacppEmbeddingDelegate(BaseModel):
+class LoadModelSrcRequestLlamacppEmbeddingDelegate(BaseModel):
     provider_public_key: constr(pattern=r'^[0-9a-fA-F]{64}$') = Field(
         ...,
         alias='providerPublicKey',
@@ -2275,12 +2268,12 @@ class LoadModelBySrcRequestLlamacppEmbeddingDelegate(BaseModel):
     )
 
 
-class LoadModelBySrcRequestLlamacppEmbeddingModelConfigDevice(Enum):
+class LoadModelSrcRequestLlamacppEmbeddingModelConfigDevice(Enum):
     gpu = 'gpu'
     cpu = 'cpu'
 
 
-class LoadModelBySrcRequestLlamacppEmbeddingModelConfigPooling(Enum):
+class LoadModelSrcRequestLlamacppEmbeddingModelConfigPooling(Enum):
     none = 'none'
     mean = 'mean'
     cls = 'cls'
@@ -2288,72 +2281,70 @@ class LoadModelBySrcRequestLlamacppEmbeddingModelConfigPooling(Enum):
     rank = 'rank'
 
 
-class LoadModelBySrcRequestLlamacppEmbeddingModelConfigAttention(Enum):
+class LoadModelSrcRequestLlamacppEmbeddingModelConfigAttention(Enum):
     causal = 'causal'
     non_causal = 'non-causal'
 
 
-class LoadModelBySrcRequestLlamacppEmbeddingModelConfigFlashAttention(Enum):
+class LoadModelSrcRequestLlamacppEmbeddingModelConfigFlashAttention(Enum):
     on = 'on'
     off = 'off'
     auto = 'auto'
 
 
-class LoadModelBySrcRequestLlamacppEmbeddingModelConfigMainGpu2(Enum):
+class LoadModelSrcRequestLlamacppEmbeddingModelConfigMainGpu(Enum):
     integrated = 'integrated'
     dedicated = 'dedicated'
 
 
-class LoadModelBySrcRequestLlamacppEmbeddingModelConfigSplitMode(Enum):
+class LoadModelSrcRequestLlamacppEmbeddingModelConfigSplitMode(Enum):
     none = 'none'
     layer = 'layer'
     row = 'row'
 
 
-class LoadModelBySrcRequestLlamacppEmbeddingModelConfig(BaseModel):
+class LoadModelSrcRequestLlamacppEmbeddingModelConfig(BaseModel):
     gpu_layers: conint(ge=-9007199254740991, le=9007199254740991) | None = Field(
         None, alias='gpuLayers'
     )
-    device: LoadModelBySrcRequestLlamacppEmbeddingModelConfigDevice | None = Field(
-        None, title='LoadModelBySrcRequestLlamacppEmbeddingModelConfigDevice'
+    device: LoadModelSrcRequestLlamacppEmbeddingModelConfigDevice | None = Field(
+        None, title='LoadModelSrcRequestLlamacppEmbeddingModelConfigDevice'
     )
     batch_size: conint(ge=1, le=9007199254740991) | None = Field(
         None, alias='batchSize'
     )
-    pooling: LoadModelBySrcRequestLlamacppEmbeddingModelConfigPooling | None = Field(
-        None, title='LoadModelBySrcRequestLlamacppEmbeddingModelConfigPooling'
+    pooling: LoadModelSrcRequestLlamacppEmbeddingModelConfigPooling | None = Field(
+        None, title='LoadModelSrcRequestLlamacppEmbeddingModelConfigPooling'
     )
-    attention: LoadModelBySrcRequestLlamacppEmbeddingModelConfigAttention | None = (
-        Field(None, title='LoadModelBySrcRequestLlamacppEmbeddingModelConfigAttention')
+    attention: LoadModelSrcRequestLlamacppEmbeddingModelConfigAttention | None = Field(
+        None, title='LoadModelSrcRequestLlamacppEmbeddingModelConfigAttention'
     )
     embd_normalize: conint(ge=-9007199254740991, le=9007199254740991) | None = Field(
         None, alias='embdNormalize'
     )
     flash_attention: (
-        LoadModelBySrcRequestLlamacppEmbeddingModelConfigFlashAttention | None
+        LoadModelSrcRequestLlamacppEmbeddingModelConfigFlashAttention | None
     ) = Field(
         None,
         alias='flashAttention',
-        title='LoadModelBySrcRequestLlamacppEmbeddingModelConfigFlashAttention',
+        title='LoadModelSrcRequestLlamacppEmbeddingModelConfigFlashAttention',
     )
     main_gpu: (
         conint(ge=0, le=9007199254740991)
-        | LoadModelBySrcRequestLlamacppEmbeddingModelConfigMainGpu2
+        | LoadModelSrcRequestLlamacppEmbeddingModelConfigMainGpu
         | None
     ) = Field(None, alias='mainGpu')
-    split_mode: LoadModelBySrcRequestLlamacppEmbeddingModelConfigSplitMode | None = (
-        Field(
-            None,
-            alias='splitMode',
-            title='LoadModelBySrcRequestLlamacppEmbeddingModelConfigSplitMode',
-        )
+    split_mode: LoadModelSrcRequestLlamacppEmbeddingModelConfigSplitMode | None = Field(
+        None,
+        alias='splitMode',
+        title='LoadModelSrcRequestLlamacppEmbeddingModelConfigSplitMode',
     )
     tensor_split: str | None = Field(None, alias='tensorSplit')
     verbosity: Verbosity | None = None
     opencl_cache_dir: str | None = Field(None, alias='openclCacheDir')
 
 
-class LoadModelBySrcRequestLlamacppEmbedding(BaseModel):
+class LoadModelSrcRequestLlamacppEmbedding(BaseModel):
     model_config = ConfigDict(
         extra='forbid',
     )
@@ -2362,8 +2353,8 @@ class LoadModelBySrcRequestLlamacppEmbedding(BaseModel):
     model_name: str | None = Field(None, alias='modelName')
     with_progress: bool | None = Field(None, alias='withProgress')
     seed: bool | None = None
-    delegate: LoadModelBySrcRequestLlamacppEmbeddingDelegate | None = Field(
-        None, title='LoadModelBySrcRequestLlamacppEmbeddingDelegate'
+    delegate: LoadModelSrcRequestLlamacppEmbeddingDelegate | None = Field(
+        None, title='LoadModelSrcRequestLlamacppEmbeddingDelegate'
     )
     request_id: constr(min_length=1) | None = Field(
         None,
@@ -2371,14 +2362,14 @@ class LoadModelBySrcRequestLlamacppEmbedding(BaseModel):
         description='Stable identifier for this in-flight load, generated by the client at call time. Optional on the wire so legacy clients keep working — the server falls back to a server-generated id when the field is missing. Exposed on the client-side decorated promise so callers can target this load with `cancel({ requestId })`.',
     )
     model_type: Literal['llamacpp-embedding'] = Field(..., alias='modelType')
-    model_config_: LoadModelBySrcRequestLlamacppEmbeddingModelConfig = Field(
+    model_config_: LoadModelSrcRequestLlamacppEmbeddingModelConfig = Field(
         ...,
         alias='modelConfig',
-        title='LoadModelBySrcRequestLlamacppEmbeddingModelConfig',
+        title='LoadModelSrcRequestLlamacppEmbeddingModelConfig',
     )
 
 
-class LoadModelBySrcRequestNmtcppTranslationDelegate(BaseModel):
+class LoadModelSrcRequestNmtcppTranslationDelegate(BaseModel):
     provider_public_key: constr(pattern=r'^[0-9a-fA-F]{64}$') = Field(
         ...,
         alias='providerPublicKey',
@@ -2404,11 +2395,11 @@ class LoadModelBySrcRequestNmtcppTranslationDelegate(BaseModel):
     )
 
 
-class LoadModelBySrcRequestNmtcppTranslationModelConfigBergamotMode(Enum):
+class LoadModelSrcRequestNmtcppTranslationModelConfigBergamotMode(Enum):
     full = 'full'
 
 
-class LoadModelBySrcRequestNmtcppTranslationModelConfigBergamotFrom(Enum):
+class LoadModelSrcRequestNmtcppTranslationModelConfigBergamotFrom(Enum):
     en = 'en'
     ar = 'ar'
     bg = 'bg'
@@ -2465,7 +2456,7 @@ class LoadModelBySrcRequestNmtcppTranslationModelConfigBergamotFrom(Enum):
     vi = 'vi'
 
 
-class LoadModelBySrcRequestNmtcppTranslationModelConfigBergamotTo(Enum):
+class LoadModelSrcRequestNmtcppTranslationModelConfigBergamotTo(Enum):
     en = 'en'
     ar = 'ar'
     bg = 'bg'
@@ -2522,7 +2513,7 @@ class LoadModelBySrcRequestNmtcppTranslationModelConfigBergamotTo(Enum):
     vi = 'vi'
 
 
-class LoadModelBySrcRequestNmtcppTranslationModelConfigBergamotSrcVocabSrc2Addon1(Enum):
+class LoadModelSrcRequestNmtcppTranslationModelConfigBergamotSrcVocabSrcAddon(Enum):
     llamacpp_completion = 'llamacpp-completion'
     whispercpp_transcription = 'whispercpp-transcription'
     bci_whispercpp_transcription = 'bci-whispercpp-transcription'
@@ -2548,7 +2539,7 @@ class LoadModelBySrcRequestNmtcppTranslationModelConfigBergamotSrcVocabSrc2Addon
     classification = 'classification'
 
 
-class LoadModelBySrcRequestNmtcppTranslationModelConfigBergamotSrcVocabSrc2(BaseModel):
+class LoadModelSrcRequestNmtcppTranslationModelConfigBergamotSrcVocabSrc(BaseModel):
     src: str
     name: str | None = None
     model_id: str | None = Field(None, alias='modelId')
@@ -2560,13 +2551,13 @@ class LoadModelBySrcRequestNmtcppTranslationModelConfigBergamotSrcVocabSrc2(Base
     expected_size: float | None = Field(None, alias='expectedSize')
     sha256_checksum: str | None = Field(None, alias='sha256Checksum')
     addon: (
-        LoadModelBySrcRequestNmtcppTranslationModelConfigBergamotSrcVocabSrc2Addon1
+        LoadModelSrcRequestNmtcppTranslationModelConfigBergamotSrcVocabSrcAddon
         | Literal['vad']
         | None
     ) = None
 
 
-class LoadModelBySrcRequestNmtcppTranslationModelConfigBergamotDstVocabSrc2Addon1(Enum):
+class LoadModelSrcRequestNmtcppTranslationModelConfigBergamotDstVocabSrcAddon(Enum):
     llamacpp_completion = 'llamacpp-completion'
     whispercpp_transcription = 'whispercpp-transcription'
     bci_whispercpp_transcription = 'bci-whispercpp-transcription'
@@ -2592,7 +2583,7 @@ class LoadModelBySrcRequestNmtcppTranslationModelConfigBergamotDstVocabSrc2Addon
     classification = 'classification'
 
 
-class LoadModelBySrcRequestNmtcppTranslationModelConfigBergamotDstVocabSrc2(BaseModel):
+class LoadModelSrcRequestNmtcppTranslationModelConfigBergamotDstVocabSrc(BaseModel):
     src: str
     name: str | None = None
     model_id: str | None = Field(None, alias='modelId')
@@ -2604,17 +2595,17 @@ class LoadModelBySrcRequestNmtcppTranslationModelConfigBergamotDstVocabSrc2(Base
     expected_size: float | None = Field(None, alias='expectedSize')
     sha256_checksum: str | None = Field(None, alias='sha256Checksum')
     addon: (
-        LoadModelBySrcRequestNmtcppTranslationModelConfigBergamotDstVocabSrc2Addon1
+        LoadModelSrcRequestNmtcppTranslationModelConfigBergamotDstVocabSrcAddon
         | Literal['vad']
         | None
     ) = None
 
 
-class LoadModelBySrcRequestNmtcppTranslationModelConfigBergamotPivotModelMode(Enum):
+class LoadModelSrcRequestNmtcppTranslationModelConfigBergamotPivotModelMode(Enum):
     full = 'full'
 
 
-class LoadModelBySrcRequestNmtcppTranslationModelConfigBergamotPivotModelModelSrc2Addon1(
+class LoadModelSrcRequestNmtcppTranslationModelConfigBergamotPivotModelModelSrcAddon(
     Enum
 ):
     llamacpp_completion = 'llamacpp-completion'
@@ -2642,7 +2633,7 @@ class LoadModelBySrcRequestNmtcppTranslationModelConfigBergamotPivotModelModelSr
     classification = 'classification'
 
 
-class LoadModelBySrcRequestNmtcppTranslationModelConfigBergamotPivotModelModelSrc2(
+class LoadModelSrcRequestNmtcppTranslationModelConfigBergamotPivotModelModelSrc(
     BaseModel
 ):
     src: str
@@ -2656,13 +2647,13 @@ class LoadModelBySrcRequestNmtcppTranslationModelConfigBergamotPivotModelModelSr
     expected_size: float | None = Field(None, alias='expectedSize')
     sha256_checksum: str | None = Field(None, alias='sha256Checksum')
     addon: (
-        LoadModelBySrcRequestNmtcppTranslationModelConfigBergamotPivotModelModelSrc2Addon1
+        LoadModelSrcRequestNmtcppTranslationModelConfigBergamotPivotModelModelSrcAddon
         | Literal['vad']
         | None
     ) = None
 
 
-class LoadModelBySrcRequestNmtcppTranslationModelConfigBergamotPivotModelSrcVocabSrc2Addon1(
+class LoadModelSrcRequestNmtcppTranslationModelConfigBergamotPivotModelSrcVocabSrcAddon(
     Enum
 ):
     llamacpp_completion = 'llamacpp-completion'
@@ -2690,7 +2681,7 @@ class LoadModelBySrcRequestNmtcppTranslationModelConfigBergamotPivotModelSrcVoca
     classification = 'classification'
 
 
-class LoadModelBySrcRequestNmtcppTranslationModelConfigBergamotPivotModelSrcVocabSrc2(
+class LoadModelSrcRequestNmtcppTranslationModelConfigBergamotPivotModelSrcVocabSrc(
     BaseModel
 ):
     src: str
@@ -2704,13 +2695,13 @@ class LoadModelBySrcRequestNmtcppTranslationModelConfigBergamotPivotModelSrcVoca
     expected_size: float | None = Field(None, alias='expectedSize')
     sha256_checksum: str | None = Field(None, alias='sha256Checksum')
     addon: (
-        LoadModelBySrcRequestNmtcppTranslationModelConfigBergamotPivotModelSrcVocabSrc2Addon1
+        LoadModelSrcRequestNmtcppTranslationModelConfigBergamotPivotModelSrcVocabSrcAddon
         | Literal['vad']
         | None
     ) = None
 
 
-class LoadModelBySrcRequestNmtcppTranslationModelConfigBergamotPivotModelDstVocabSrc2Addon1(
+class LoadModelSrcRequestNmtcppTranslationModelConfigBergamotPivotModelDstVocabSrcAddon(
     Enum
 ):
     llamacpp_completion = 'llamacpp-completion'
@@ -2738,7 +2729,7 @@ class LoadModelBySrcRequestNmtcppTranslationModelConfigBergamotPivotModelDstVoca
     classification = 'classification'
 
 
-class LoadModelBySrcRequestNmtcppTranslationModelConfigBergamotPivotModelDstVocabSrc2(
+class LoadModelSrcRequestNmtcppTranslationModelConfigBergamotPivotModelDstVocabSrc(
     BaseModel
 ):
     src: str
@@ -2752,18 +2743,18 @@ class LoadModelBySrcRequestNmtcppTranslationModelConfigBergamotPivotModelDstVoca
     expected_size: float | None = Field(None, alias='expectedSize')
     sha256_checksum: str | None = Field(None, alias='sha256Checksum')
     addon: (
-        LoadModelBySrcRequestNmtcppTranslationModelConfigBergamotPivotModelDstVocabSrc2Addon1
+        LoadModelSrcRequestNmtcppTranslationModelConfigBergamotPivotModelDstVocabSrcAddon
         | Literal['vad']
         | None
     ) = None
 
 
-class LoadModelBySrcRequestNmtcppTranslationModelConfigBergamotPivotModel(BaseModel):
+class LoadModelSrcRequestNmtcppTranslationModelConfigBergamotPivotModel(BaseModel):
     mode: (
-        LoadModelBySrcRequestNmtcppTranslationModelConfigBergamotPivotModelMode | None
+        LoadModelSrcRequestNmtcppTranslationModelConfigBergamotPivotModelMode | None
     ) = Field(
         None,
-        title='LoadModelBySrcRequestNmtcppTranslationModelConfigBergamotPivotModelMode',
+        title='LoadModelSrcRequestNmtcppTranslationModelConfigBergamotPivotModelMode',
     )
     beamsize: float | None = None
     lengthpenalty: float | None = None
@@ -2774,25 +2765,24 @@ class LoadModelBySrcRequestNmtcppTranslationModelConfigBergamotPivotModel(BaseMo
     topk: float | None = None
     topp: float | None = None
     model_src: (
-        str
-        | LoadModelBySrcRequestNmtcppTranslationModelConfigBergamotPivotModelModelSrc2
+        str | LoadModelSrcRequestNmtcppTranslationModelConfigBergamotPivotModelModelSrc
     ) = Field(..., alias='modelSrc')
     src_vocab_src: (
         str
-        | LoadModelBySrcRequestNmtcppTranslationModelConfigBergamotPivotModelSrcVocabSrc2
+        | LoadModelSrcRequestNmtcppTranslationModelConfigBergamotPivotModelSrcVocabSrc
         | None
     ) = Field(None, alias='srcVocabSrc')
     dst_vocab_src: (
         str
-        | LoadModelBySrcRequestNmtcppTranslationModelConfigBergamotPivotModelDstVocabSrc2
+        | LoadModelSrcRequestNmtcppTranslationModelConfigBergamotPivotModelDstVocabSrc
         | None
     ) = Field(None, alias='dstVocabSrc')
     normalize: float | None = None
 
 
-class LoadModelBySrcRequestNmtcppTranslationModelConfigBergamot(BaseModel):
-    mode: LoadModelBySrcRequestNmtcppTranslationModelConfigBergamotMode | None = Field(
-        None, title='LoadModelBySrcRequestNmtcppTranslationModelConfigBergamotMode'
+class LoadModelSrcRequestNmtcppTranslationModelConfigBergamot(BaseModel):
+    mode: LoadModelSrcRequestNmtcppTranslationModelConfigBergamotMode | None = Field(
+        None, title='LoadModelSrcRequestNmtcppTranslationModelConfigBergamotMode'
     )
     beamsize: float | None = None
     lengthpenalty: float | None = None
@@ -2803,39 +2793,35 @@ class LoadModelBySrcRequestNmtcppTranslationModelConfigBergamot(BaseModel):
     topk: float | None = None
     topp: float | None = None
     engine: Literal['Bergamot']
-    from_: LoadModelBySrcRequestNmtcppTranslationModelConfigBergamotFrom = Field(
+    from_: LoadModelSrcRequestNmtcppTranslationModelConfigBergamotFrom = Field(
         ...,
         alias='from',
-        title='LoadModelBySrcRequestNmtcppTranslationModelConfigBergamotFrom',
+        title='LoadModelSrcRequestNmtcppTranslationModelConfigBergamotFrom',
     )
-    to: LoadModelBySrcRequestNmtcppTranslationModelConfigBergamotTo = Field(
-        ..., title='LoadModelBySrcRequestNmtcppTranslationModelConfigBergamotTo'
+    to: LoadModelSrcRequestNmtcppTranslationModelConfigBergamotTo = Field(
+        ..., title='LoadModelSrcRequestNmtcppTranslationModelConfigBergamotTo'
     )
     src_vocab_src: (
-        str
-        | LoadModelBySrcRequestNmtcppTranslationModelConfigBergamotSrcVocabSrc2
-        | None
+        str | LoadModelSrcRequestNmtcppTranslationModelConfigBergamotSrcVocabSrc | None
     ) = Field(None, alias='srcVocabSrc')
     dst_vocab_src: (
-        str
-        | LoadModelBySrcRequestNmtcppTranslationModelConfigBergamotDstVocabSrc2
-        | None
+        str | LoadModelSrcRequestNmtcppTranslationModelConfigBergamotDstVocabSrc | None
     ) = Field(None, alias='dstVocabSrc')
     normalize: float | None = None
     pivot_model: (
-        LoadModelBySrcRequestNmtcppTranslationModelConfigBergamotPivotModel | None
+        LoadModelSrcRequestNmtcppTranslationModelConfigBergamotPivotModel | None
     ) = Field(
         None,
         alias='pivotModel',
-        title='LoadModelBySrcRequestNmtcppTranslationModelConfigBergamotPivotModel',
+        title='LoadModelSrcRequestNmtcppTranslationModelConfigBergamotPivotModel',
     )
 
 
-class LoadModelBySrcRequestNmtcppTranslationModelConfigIndicTransMode(Enum):
+class LoadModelSrcRequestNmtcppTranslationModelConfigIndicTransMode(Enum):
     full = 'full'
 
 
-class LoadModelBySrcRequestNmtcppTranslationModelConfigIndicTransFrom(Enum):
+class LoadModelSrcRequestNmtcppTranslationModelConfigIndicTransFrom(Enum):
     asm_beng = 'asm_Beng'
     ben_beng = 'ben_Beng'
     brx_deva = 'brx_Deva'
@@ -2864,7 +2850,7 @@ class LoadModelBySrcRequestNmtcppTranslationModelConfigIndicTransFrom(Enum):
     urd_arab = 'urd_Arab'
 
 
-class LoadModelBySrcRequestNmtcppTranslationModelConfigIndicTransTo(Enum):
+class LoadModelSrcRequestNmtcppTranslationModelConfigIndicTransTo(Enum):
     asm_beng = 'asm_Beng'
     ben_beng = 'ben_Beng'
     brx_deva = 'brx_Deva'
@@ -2893,12 +2879,9 @@ class LoadModelBySrcRequestNmtcppTranslationModelConfigIndicTransTo(Enum):
     urd_arab = 'urd_Arab'
 
 
-class LoadModelBySrcRequestNmtcppTranslationModelConfigIndicTrans(BaseModel):
-    mode: LoadModelBySrcRequestNmtcppTranslationModelConfigIndicTransMode | None = (
-        Field(
-            None,
-            title='LoadModelBySrcRequestNmtcppTranslationModelConfigIndicTransMode',
-        )
+class LoadModelSrcRequestNmtcppTranslationModelConfigIndicTrans(BaseModel):
+    mode: LoadModelSrcRequestNmtcppTranslationModelConfigIndicTransMode | None = Field(
+        None, title='LoadModelSrcRequestNmtcppTranslationModelConfigIndicTransMode'
     )
     beamsize: float | None = None
     lengthpenalty: float | None = None
@@ -2909,17 +2892,17 @@ class LoadModelBySrcRequestNmtcppTranslationModelConfigIndicTrans(BaseModel):
     topk: float | None = None
     topp: float | None = None
     engine: Literal['IndicTrans']
-    from_: LoadModelBySrcRequestNmtcppTranslationModelConfigIndicTransFrom = Field(
+    from_: LoadModelSrcRequestNmtcppTranslationModelConfigIndicTransFrom = Field(
         ...,
         alias='from',
-        title='LoadModelBySrcRequestNmtcppTranslationModelConfigIndicTransFrom',
+        title='LoadModelSrcRequestNmtcppTranslationModelConfigIndicTransFrom',
     )
-    to: LoadModelBySrcRequestNmtcppTranslationModelConfigIndicTransTo = Field(
-        ..., title='LoadModelBySrcRequestNmtcppTranslationModelConfigIndicTransTo'
+    to: LoadModelSrcRequestNmtcppTranslationModelConfigIndicTransTo = Field(
+        ..., title='LoadModelSrcRequestNmtcppTranslationModelConfigIndicTransTo'
     )
 
 
-class LoadModelBySrcRequestNmtcppTranslation(BaseModel):
+class LoadModelSrcRequestNmtcppTranslation(BaseModel):
     model_config = ConfigDict(
         extra='forbid',
     )
@@ -2928,8 +2911,8 @@ class LoadModelBySrcRequestNmtcppTranslation(BaseModel):
     model_name: str | None = Field(None, alias='modelName')
     with_progress: bool | None = Field(None, alias='withProgress')
     seed: bool | None = None
-    delegate: LoadModelBySrcRequestNmtcppTranslationDelegate | None = Field(
-        None, title='LoadModelBySrcRequestNmtcppTranslationDelegate'
+    delegate: LoadModelSrcRequestNmtcppTranslationDelegate | None = Field(
+        None, title='LoadModelSrcRequestNmtcppTranslationDelegate'
     )
     request_id: constr(min_length=1) | None = Field(
         None,
@@ -2938,12 +2921,12 @@ class LoadModelBySrcRequestNmtcppTranslation(BaseModel):
     )
     model_type: Literal['nmtcpp-translation'] = Field(..., alias='modelType')
     model_config_: (
-        LoadModelBySrcRequestNmtcppTranslationModelConfigBergamot
-        | LoadModelBySrcRequestNmtcppTranslationModelConfigIndicTrans
+        LoadModelSrcRequestNmtcppTranslationModelConfigBergamot
+        | LoadModelSrcRequestNmtcppTranslationModelConfigIndicTrans
     ) = Field(..., alias='modelConfig')
 
 
-class LoadModelBySrcRequestTtsGgmlDelegate(BaseModel):
+class LoadModelSrcRequestTtsGgmlDelegate(BaseModel):
     provider_public_key: constr(pattern=r'^[0-9a-fA-F]{64}$') = Field(
         ...,
         alias='providerPublicKey',
@@ -2969,7 +2952,7 @@ class LoadModelBySrcRequestTtsGgmlDelegate(BaseModel):
     )
 
 
-class LoadModelBySrcRequestTtsGgmlModelConfigChatterboxLanguage(Enum):
+class LoadModelSrcRequestTtsGgmlModelConfigChatterboxLanguage(Enum):
     en = 'en'
     es = 'es'
     fr = 'fr'
@@ -2994,7 +2977,7 @@ class LoadModelBySrcRequestTtsGgmlModelConfigChatterboxLanguage(Enum):
     hi = 'hi'
 
 
-class LoadModelBySrcRequestTtsGgmlModelConfigChatterboxS3genModelSrc2Addon1(Enum):
+class LoadModelSrcRequestTtsGgmlModelConfigChatterboxS3genModelSrcAddon(Enum):
     llamacpp_completion = 'llamacpp-completion'
     whispercpp_transcription = 'whispercpp-transcription'
     bci_whispercpp_transcription = 'bci-whispercpp-transcription'
@@ -3020,7 +3003,7 @@ class LoadModelBySrcRequestTtsGgmlModelConfigChatterboxS3genModelSrc2Addon1(Enum
     classification = 'classification'
 
 
-class LoadModelBySrcRequestTtsGgmlModelConfigChatterboxS3genModelSrc2(BaseModel):
+class LoadModelSrcRequestTtsGgmlModelConfigChatterboxS3genModelSrc(BaseModel):
     src: str
     name: str | None = None
     model_id: str | None = Field(None, alias='modelId')
@@ -3032,13 +3015,13 @@ class LoadModelBySrcRequestTtsGgmlModelConfigChatterboxS3genModelSrc2(BaseModel)
     expected_size: float | None = Field(None, alias='expectedSize')
     sha256_checksum: str | None = Field(None, alias='sha256Checksum')
     addon: (
-        LoadModelBySrcRequestTtsGgmlModelConfigChatterboxS3genModelSrc2Addon1
+        LoadModelSrcRequestTtsGgmlModelConfigChatterboxS3genModelSrcAddon
         | Literal['vad']
         | None
     ) = None
 
 
-class LoadModelBySrcRequestTtsGgmlModelConfigChatterboxReferenceAudioSrc2Addon1(Enum):
+class LoadModelSrcRequestTtsGgmlModelConfigChatterboxReferenceAudioSrcAddon(Enum):
     llamacpp_completion = 'llamacpp-completion'
     whispercpp_transcription = 'whispercpp-transcription'
     bci_whispercpp_transcription = 'bci-whispercpp-transcription'
@@ -3064,7 +3047,7 @@ class LoadModelBySrcRequestTtsGgmlModelConfigChatterboxReferenceAudioSrc2Addon1(
     classification = 'classification'
 
 
-class LoadModelBySrcRequestTtsGgmlModelConfigChatterboxReferenceAudioSrc2(BaseModel):
+class LoadModelSrcRequestTtsGgmlModelConfigChatterboxReferenceAudioSrc(BaseModel):
     src: str
     name: str | None = None
     model_id: str | None = Field(None, alias='modelId')
@@ -3076,19 +3059,19 @@ class LoadModelBySrcRequestTtsGgmlModelConfigChatterboxReferenceAudioSrc2(BaseMo
     expected_size: float | None = Field(None, alias='expectedSize')
     sha256_checksum: str | None = Field(None, alias='sha256Checksum')
     addon: (
-        LoadModelBySrcRequestTtsGgmlModelConfigChatterboxReferenceAudioSrc2Addon1
+        LoadModelSrcRequestTtsGgmlModelConfigChatterboxReferenceAudioSrcAddon
         | Literal['vad']
         | None
     ) = None
 
 
-class LoadModelBySrcRequestTtsGgmlModelConfigChatterbox(BaseModel):
+class LoadModelSrcRequestTtsGgmlModelConfigChatterbox(BaseModel):
     model_config = ConfigDict(
         extra='forbid',
     )
     tts_engine: Literal['chatterbox'] = Field(..., alias='ttsEngine')
-    language: LoadModelBySrcRequestTtsGgmlModelConfigChatterboxLanguage = Field(
-        ..., title='LoadModelBySrcRequestTtsGgmlModelConfigChatterboxLanguage'
+    language: LoadModelSrcRequestTtsGgmlModelConfigChatterboxLanguage = Field(
+        ..., title='LoadModelSrcRequestTtsGgmlModelConfigChatterboxLanguage'
     )
     voice: str | None = None
     use_gpu: bool | None = Field(None, alias='useGPU')
@@ -3105,10 +3088,10 @@ class LoadModelBySrcRequestTtsGgmlModelConfigChatterbox(BaseModel):
     )
     seed: conint(ge=-9007199254740991, le=9007199254740991) | None = None
     s3gen_model_src: (
-        str | LoadModelBySrcRequestTtsGgmlModelConfigChatterboxS3genModelSrc2 | None
+        str | LoadModelSrcRequestTtsGgmlModelConfigChatterboxS3genModelSrc | None
     ) = Field(None, alias='s3genModelSrc')
     reference_audio_src: (
-        str | LoadModelBySrcRequestTtsGgmlModelConfigChatterboxReferenceAudioSrc2 | None
+        str | LoadModelSrcRequestTtsGgmlModelConfigChatterboxReferenceAudioSrc | None
     ) = Field(None, alias='referenceAudioSrc')
     tts_supertonic_multilingual: Any | None = Field(
         None, alias='ttsSupertonicMultilingual'
@@ -3131,7 +3114,7 @@ class LoadModelBySrcRequestTtsGgmlModelConfigChatterbox(BaseModel):
     tts_voice_style_src: Any | None = Field(None, alias='ttsVoiceStyleSrc')
 
 
-class LoadModelBySrcRequestTtsGgmlModelConfigSupertonicLanguage(Enum):
+class LoadModelSrcRequestTtsGgmlModelConfigSupertonicLanguage(Enum):
     en = 'en'
     ko = 'ko'
     ja = 'ja'
@@ -3165,13 +3148,13 @@ class LoadModelBySrcRequestTtsGgmlModelConfigSupertonicLanguage(Enum):
     vi = 'vi'
 
 
-class LoadModelBySrcRequestTtsGgmlModelConfigSupertonic(BaseModel):
+class LoadModelSrcRequestTtsGgmlModelConfigSupertonic(BaseModel):
     model_config = ConfigDict(
         extra='forbid',
     )
     tts_engine: Literal['supertonic'] = Field(..., alias='ttsEngine')
-    language: LoadModelBySrcRequestTtsGgmlModelConfigSupertonicLanguage = Field(
-        ..., title='LoadModelBySrcRequestTtsGgmlModelConfigSupertonicLanguage'
+    language: LoadModelSrcRequestTtsGgmlModelConfigSupertonicLanguage = Field(
+        ..., title='LoadModelSrcRequestTtsGgmlModelConfigSupertonicLanguage'
     )
     voice: str | None = None
     tts_speed: float | None = Field(None, alias='ttsSpeed')
@@ -3198,7 +3181,7 @@ class LoadModelBySrcRequestTtsGgmlModelConfigSupertonic(BaseModel):
     tts_voice_style_src: Any | None = Field(None, alias='ttsVoiceStyleSrc')
 
 
-class LoadModelBySrcRequestTtsGgml(BaseModel):
+class LoadModelSrcRequestTtsGgml(BaseModel):
     model_config = ConfigDict(
         extra='forbid',
     )
@@ -3207,8 +3190,8 @@ class LoadModelBySrcRequestTtsGgml(BaseModel):
     model_name: str | None = Field(None, alias='modelName')
     with_progress: bool | None = Field(None, alias='withProgress')
     seed: bool | None = None
-    delegate: LoadModelBySrcRequestTtsGgmlDelegate | None = Field(
-        None, title='LoadModelBySrcRequestTtsGgmlDelegate'
+    delegate: LoadModelSrcRequestTtsGgmlDelegate | None = Field(
+        None, title='LoadModelSrcRequestTtsGgmlDelegate'
     )
     request_id: constr(min_length=1) | None = Field(
         None,
@@ -3217,12 +3200,12 @@ class LoadModelBySrcRequestTtsGgml(BaseModel):
     )
     model_type: Literal['tts-ggml'] = Field(..., alias='modelType')
     model_config_: (
-        LoadModelBySrcRequestTtsGgmlModelConfigChatterbox
-        | LoadModelBySrcRequestTtsGgmlModelConfigSupertonic
+        LoadModelSrcRequestTtsGgmlModelConfigChatterbox
+        | LoadModelSrcRequestTtsGgmlModelConfigSupertonic
     ) = Field(..., alias='modelConfig')
 
 
-class LoadModelBySrcRequestGgmlOcrDelegate(BaseModel):
+class LoadModelSrcRequestGgmlOcrDelegate(BaseModel):
     provider_public_key: constr(pattern=r'^[0-9a-fA-F]{64}$') = Field(
         ...,
         alias='providerPublicKey',
@@ -3248,19 +3231,19 @@ class LoadModelBySrcRequestGgmlOcrDelegate(BaseModel):
     )
 
 
-class LoadModelBySrcRequestGgmlOcrModelConfigPipelineType(Enum):
+class LoadModelSrcRequestGgmlOcrModelConfigPipelineType(Enum):
     easyocr = 'easyocr'
     doctr = 'doctr'
 
 
-class LoadModelBySrcRequestGgmlOcrModelConfigBackendDevice(Enum):
+class LoadModelSrcRequestGgmlOcrModelConfigBackendDevice(Enum):
     cpu = 'cpu'
     vulkan = 'vulkan'
     metal = 'metal'
     opencl = 'opencl'
 
 
-class LoadModelBySrcRequestGgmlOcrModelConfigDetectorModelSrc2Addon1(Enum):
+class LoadModelSrcRequestGgmlOcrModelConfigDetectorModelSrcAddon(Enum):
     llamacpp_completion = 'llamacpp-completion'
     whispercpp_transcription = 'whispercpp-transcription'
     bci_whispercpp_transcription = 'bci-whispercpp-transcription'
@@ -3286,7 +3269,7 @@ class LoadModelBySrcRequestGgmlOcrModelConfigDetectorModelSrc2Addon1(Enum):
     classification = 'classification'
 
 
-class LoadModelBySrcRequestGgmlOcrModelConfigDetectorModelSrc2(BaseModel):
+class LoadModelSrcRequestGgmlOcrModelConfigDetectorModelSrc(BaseModel):
     src: str
     name: str | None = None
     model_id: str | None = Field(None, alias='modelId')
@@ -3298,18 +3281,18 @@ class LoadModelBySrcRequestGgmlOcrModelConfigDetectorModelSrc2(BaseModel):
     expected_size: float | None = Field(None, alias='expectedSize')
     sha256_checksum: str | None = Field(None, alias='sha256Checksum')
     addon: (
-        LoadModelBySrcRequestGgmlOcrModelConfigDetectorModelSrc2Addon1
+        LoadModelSrcRequestGgmlOcrModelConfigDetectorModelSrcAddon
         | Literal['vad']
         | None
     ) = None
 
 
-class LoadModelBySrcRequestGgmlOcrModelConfig(BaseModel):
+class LoadModelSrcRequestGgmlOcrModelConfig(BaseModel):
     lang_list: list[str] | None = Field(None, alias='langList')
-    pipeline_type: LoadModelBySrcRequestGgmlOcrModelConfigPipelineType | None = Field(
+    pipeline_type: LoadModelSrcRequestGgmlOcrModelConfigPipelineType | None = Field(
         None,
         alias='pipelineType',
-        title='LoadModelBySrcRequestGgmlOcrModelConfigPipelineType',
+        title='LoadModelSrcRequestGgmlOcrModelConfigPipelineType',
     )
     mag_ratio: float | None = Field(None, alias='magRatio')
     canvas_size: float | None = Field(None, alias='canvasSize')
@@ -3320,18 +3303,18 @@ class LoadModelBySrcRequestGgmlOcrModelConfig(BaseModel):
     low_confidence_threshold: float | None = Field(None, alias='lowConfidenceThreshold')
     recognizer_batch_size: float | None = Field(None, alias='recognizerBatchSize')
     n_threads: float | None = Field(None, alias='nThreads')
-    backend_device: LoadModelBySrcRequestGgmlOcrModelConfigBackendDevice | None = Field(
+    backend_device: LoadModelSrcRequestGgmlOcrModelConfigBackendDevice | None = Field(
         None,
         alias='backendDevice',
-        title='LoadModelBySrcRequestGgmlOcrModelConfigBackendDevice',
+        title='LoadModelSrcRequestGgmlOcrModelConfigBackendDevice',
     )
     gpu_device: float | None = Field(None, alias='gpuDevice')
     detector_model_src: (
-        str | LoadModelBySrcRequestGgmlOcrModelConfigDetectorModelSrc2 | None
+        str | LoadModelSrcRequestGgmlOcrModelConfigDetectorModelSrc | None
     ) = Field(None, alias='detectorModelSrc')
 
 
-class LoadModelBySrcRequestGgmlOcr(BaseModel):
+class LoadModelSrcRequestGgmlOcr(BaseModel):
     model_config = ConfigDict(
         extra='forbid',
     )
@@ -3340,8 +3323,8 @@ class LoadModelBySrcRequestGgmlOcr(BaseModel):
     model_name: str | None = Field(None, alias='modelName')
     with_progress: bool | None = Field(None, alias='withProgress')
     seed: bool | None = None
-    delegate: LoadModelBySrcRequestGgmlOcrDelegate | None = Field(
-        None, title='LoadModelBySrcRequestGgmlOcrDelegate'
+    delegate: LoadModelSrcRequestGgmlOcrDelegate | None = Field(
+        None, title='LoadModelSrcRequestGgmlOcrDelegate'
     )
     request_id: constr(min_length=1) | None = Field(
         None,
@@ -3349,12 +3332,12 @@ class LoadModelBySrcRequestGgmlOcr(BaseModel):
         description='Stable identifier for this in-flight load, generated by the client at call time. Optional on the wire so legacy clients keep working — the server falls back to a server-generated id when the field is missing. Exposed on the client-side decorated promise so callers can target this load with `cancel({ requestId })`.',
     )
     model_type: Literal['ggml-ocr'] = Field(..., alias='modelType')
-    model_config_: LoadModelBySrcRequestGgmlOcrModelConfig = Field(
-        ..., alias='modelConfig', title='LoadModelBySrcRequestGgmlOcrModelConfig'
+    model_config_: LoadModelSrcRequestGgmlOcrModelConfig = Field(
+        ..., alias='modelConfig', title='LoadModelSrcRequestGgmlOcrModelConfig'
     )
 
 
-class LoadModelBySrcRequestSdcppGenerationDelegate(BaseModel):
+class LoadModelSrcRequestSdcppGenerationDelegate(BaseModel):
     provider_public_key: constr(pattern=r'^[0-9a-fA-F]{64}$') = Field(
         ...,
         alias='providerPublicKey',
@@ -3380,18 +3363,18 @@ class LoadModelBySrcRequestSdcppGenerationDelegate(BaseModel):
     )
 
 
-class LoadModelBySrcRequestSdcppGenerationModelConfigMode(Enum):
+class LoadModelSrcRequestSdcppGenerationModelConfigMode(Enum):
     diffusion = 'diffusion'
     upscale = 'upscale'
     video = 'video'
 
 
-class LoadModelBySrcRequestSdcppGenerationModelConfigDevice(Enum):
+class LoadModelSrcRequestSdcppGenerationModelConfigDevice(Enum):
     gpu = 'gpu'
     cpu = 'cpu'
 
 
-class LoadModelBySrcRequestSdcppGenerationModelConfigPrediction(Enum):
+class LoadModelSrcRequestSdcppGenerationModelConfigPrediction(Enum):
     auto = 'auto'
     eps = 'eps'
     v = 'v'
@@ -3400,7 +3383,7 @@ class LoadModelBySrcRequestSdcppGenerationModelConfigPrediction(Enum):
     flux2_flow = 'flux2_flow'
 
 
-class LoadModelBySrcRequestSdcppGenerationModelConfigType(Enum):
+class LoadModelSrcRequestSdcppGenerationModelConfigType(Enum):
     auto = 'auto'
     f32 = 'f32'
     f16 = 'f16'
@@ -3417,25 +3400,25 @@ class LoadModelBySrcRequestSdcppGenerationModelConfigType(Enum):
     q8_0 = 'q8_0'
 
 
-class LoadModelBySrcRequestSdcppGenerationModelConfigRng(Enum):
+class LoadModelSrcRequestSdcppGenerationModelConfigRng(Enum):
     cpu = 'cpu'
     cuda = 'cuda'
     std_default = 'std_default'
 
 
-class LoadModelBySrcRequestSdcppGenerationModelConfigSamplerRng(Enum):
+class LoadModelSrcRequestSdcppGenerationModelConfigSamplerRng(Enum):
     cpu = 'cpu'
     cuda = 'cuda'
     std_default = 'std_default'
 
 
-class LoadModelBySrcRequestSdcppGenerationModelConfigLoraApplyMode(Enum):
+class LoadModelSrcRequestSdcppGenerationModelConfigLoraApplyMode(Enum):
     auto = 'auto'
     immediately = 'immediately'
     at_runtime = 'at_runtime'
 
 
-class LoadModelBySrcRequestSdcppGenerationModelConfigClipLModelSrc2Addon1(Enum):
+class LoadModelSrcRequestSdcppGenerationModelConfigClipLModelSrcAddon(Enum):
     llamacpp_completion = 'llamacpp-completion'
     whispercpp_transcription = 'whispercpp-transcription'
     bci_whispercpp_transcription = 'bci-whispercpp-transcription'
@@ -3461,7 +3444,7 @@ class LoadModelBySrcRequestSdcppGenerationModelConfigClipLModelSrc2Addon1(Enum):
     classification = 'classification'
 
 
-class LoadModelBySrcRequestSdcppGenerationModelConfigClipLModelSrc2(BaseModel):
+class LoadModelSrcRequestSdcppGenerationModelConfigClipLModelSrc(BaseModel):
     src: str
     name: str | None = None
     model_id: str | None = Field(None, alias='modelId')
@@ -3473,13 +3456,13 @@ class LoadModelBySrcRequestSdcppGenerationModelConfigClipLModelSrc2(BaseModel):
     expected_size: float | None = Field(None, alias='expectedSize')
     sha256_checksum: str | None = Field(None, alias='sha256Checksum')
     addon: (
-        LoadModelBySrcRequestSdcppGenerationModelConfigClipLModelSrc2Addon1
+        LoadModelSrcRequestSdcppGenerationModelConfigClipLModelSrcAddon
         | Literal['vad']
         | None
     ) = None
 
 
-class LoadModelBySrcRequestSdcppGenerationModelConfigClipGModelSrc2Addon1(Enum):
+class LoadModelSrcRequestSdcppGenerationModelConfigClipGModelSrcAddon(Enum):
     llamacpp_completion = 'llamacpp-completion'
     whispercpp_transcription = 'whispercpp-transcription'
     bci_whispercpp_transcription = 'bci-whispercpp-transcription'
@@ -3505,7 +3488,7 @@ class LoadModelBySrcRequestSdcppGenerationModelConfigClipGModelSrc2Addon1(Enum):
     classification = 'classification'
 
 
-class LoadModelBySrcRequestSdcppGenerationModelConfigClipGModelSrc2(BaseModel):
+class LoadModelSrcRequestSdcppGenerationModelConfigClipGModelSrc(BaseModel):
     src: str
     name: str | None = None
     model_id: str | None = Field(None, alias='modelId')
@@ -3517,13 +3500,13 @@ class LoadModelBySrcRequestSdcppGenerationModelConfigClipGModelSrc2(BaseModel):
     expected_size: float | None = Field(None, alias='expectedSize')
     sha256_checksum: str | None = Field(None, alias='sha256Checksum')
     addon: (
-        LoadModelBySrcRequestSdcppGenerationModelConfigClipGModelSrc2Addon1
+        LoadModelSrcRequestSdcppGenerationModelConfigClipGModelSrcAddon
         | Literal['vad']
         | None
     ) = None
 
 
-class LoadModelBySrcRequestSdcppGenerationModelConfigT5XxlModelSrc2Addon1(Enum):
+class LoadModelSrcRequestSdcppGenerationModelConfigT5XxlModelSrcAddon(Enum):
     llamacpp_completion = 'llamacpp-completion'
     whispercpp_transcription = 'whispercpp-transcription'
     bci_whispercpp_transcription = 'bci-whispercpp-transcription'
@@ -3549,7 +3532,7 @@ class LoadModelBySrcRequestSdcppGenerationModelConfigT5XxlModelSrc2Addon1(Enum):
     classification = 'classification'
 
 
-class LoadModelBySrcRequestSdcppGenerationModelConfigT5XxlModelSrc2(BaseModel):
+class LoadModelSrcRequestSdcppGenerationModelConfigT5XxlModelSrc(BaseModel):
     src: str
     name: str | None = None
     model_id: str | None = Field(None, alias='modelId')
@@ -3561,13 +3544,13 @@ class LoadModelBySrcRequestSdcppGenerationModelConfigT5XxlModelSrc2(BaseModel):
     expected_size: float | None = Field(None, alias='expectedSize')
     sha256_checksum: str | None = Field(None, alias='sha256Checksum')
     addon: (
-        LoadModelBySrcRequestSdcppGenerationModelConfigT5XxlModelSrc2Addon1
+        LoadModelSrcRequestSdcppGenerationModelConfigT5XxlModelSrcAddon
         | Literal['vad']
         | None
     ) = None
 
 
-class LoadModelBySrcRequestSdcppGenerationModelConfigLlmModelSrc2Addon1(Enum):
+class LoadModelSrcRequestSdcppGenerationModelConfigLlmModelSrcAddon(Enum):
     llamacpp_completion = 'llamacpp-completion'
     whispercpp_transcription = 'whispercpp-transcription'
     bci_whispercpp_transcription = 'bci-whispercpp-transcription'
@@ -3593,7 +3576,7 @@ class LoadModelBySrcRequestSdcppGenerationModelConfigLlmModelSrc2Addon1(Enum):
     classification = 'classification'
 
 
-class LoadModelBySrcRequestSdcppGenerationModelConfigLlmModelSrc2(BaseModel):
+class LoadModelSrcRequestSdcppGenerationModelConfigLlmModelSrc(BaseModel):
     src: str
     name: str | None = None
     model_id: str | None = Field(None, alias='modelId')
@@ -3605,13 +3588,13 @@ class LoadModelBySrcRequestSdcppGenerationModelConfigLlmModelSrc2(BaseModel):
     expected_size: float | None = Field(None, alias='expectedSize')
     sha256_checksum: str | None = Field(None, alias='sha256Checksum')
     addon: (
-        LoadModelBySrcRequestSdcppGenerationModelConfigLlmModelSrc2Addon1
+        LoadModelSrcRequestSdcppGenerationModelConfigLlmModelSrcAddon
         | Literal['vad']
         | None
     ) = None
 
 
-class LoadModelBySrcRequestSdcppGenerationModelConfigVaeModelSrc2Addon1(Enum):
+class LoadModelSrcRequestSdcppGenerationModelConfigVaeModelSrcAddon(Enum):
     llamacpp_completion = 'llamacpp-completion'
     whispercpp_transcription = 'whispercpp-transcription'
     bci_whispercpp_transcription = 'bci-whispercpp-transcription'
@@ -3637,7 +3620,7 @@ class LoadModelBySrcRequestSdcppGenerationModelConfigVaeModelSrc2Addon1(Enum):
     classification = 'classification'
 
 
-class LoadModelBySrcRequestSdcppGenerationModelConfigVaeModelSrc2(BaseModel):
+class LoadModelSrcRequestSdcppGenerationModelConfigVaeModelSrc(BaseModel):
     src: str
     name: str | None = None
     model_id: str | None = Field(None, alias='modelId')
@@ -3649,13 +3632,13 @@ class LoadModelBySrcRequestSdcppGenerationModelConfigVaeModelSrc2(BaseModel):
     expected_size: float | None = Field(None, alias='expectedSize')
     sha256_checksum: str | None = Field(None, alias='sha256Checksum')
     addon: (
-        LoadModelBySrcRequestSdcppGenerationModelConfigVaeModelSrc2Addon1
+        LoadModelSrcRequestSdcppGenerationModelConfigVaeModelSrcAddon
         | Literal['vad']
         | None
     ) = None
 
 
-class LoadModelBySrcRequestSdcppGenerationModelConfigHighNoiseDiffusionModelSrc2Addon1(
+class LoadModelSrcRequestSdcppGenerationModelConfigHighNoiseDiffusionModelSrcAddon(
     Enum
 ):
     llamacpp_completion = 'llamacpp-completion'
@@ -3683,7 +3666,7 @@ class LoadModelBySrcRequestSdcppGenerationModelConfigHighNoiseDiffusionModelSrc2
     classification = 'classification'
 
 
-class LoadModelBySrcRequestSdcppGenerationModelConfigHighNoiseDiffusionModelSrc2(
+class LoadModelSrcRequestSdcppGenerationModelConfigHighNoiseDiffusionModelSrc(
     BaseModel
 ):
     src: str
@@ -3697,13 +3680,13 @@ class LoadModelBySrcRequestSdcppGenerationModelConfigHighNoiseDiffusionModelSrc2
     expected_size: float | None = Field(None, alias='expectedSize')
     sha256_checksum: str | None = Field(None, alias='sha256Checksum')
     addon: (
-        LoadModelBySrcRequestSdcppGenerationModelConfigHighNoiseDiffusionModelSrc2Addon1
+        LoadModelSrcRequestSdcppGenerationModelConfigHighNoiseDiffusionModelSrcAddon
         | Literal['vad']
         | None
     ) = None
 
 
-class LoadModelBySrcRequestSdcppGenerationModelConfigClipVisionModelSrc2Addon1(Enum):
+class LoadModelSrcRequestSdcppGenerationModelConfigClipVisionModelSrcAddon(Enum):
     llamacpp_completion = 'llamacpp-completion'
     whispercpp_transcription = 'whispercpp-transcription'
     bci_whispercpp_transcription = 'bci-whispercpp-transcription'
@@ -3729,7 +3712,7 @@ class LoadModelBySrcRequestSdcppGenerationModelConfigClipVisionModelSrc2Addon1(E
     classification = 'classification'
 
 
-class LoadModelBySrcRequestSdcppGenerationModelConfigClipVisionModelSrc2(BaseModel):
+class LoadModelSrcRequestSdcppGenerationModelConfigClipVisionModelSrc(BaseModel):
     src: str
     name: str | None = None
     model_id: str | None = Field(None, alias='modelId')
@@ -3741,13 +3724,13 @@ class LoadModelBySrcRequestSdcppGenerationModelConfigClipVisionModelSrc2(BaseMod
     expected_size: float | None = Field(None, alias='expectedSize')
     sha256_checksum: str | None = Field(None, alias='sha256Checksum')
     addon: (
-        LoadModelBySrcRequestSdcppGenerationModelConfigClipVisionModelSrc2Addon1
+        LoadModelSrcRequestSdcppGenerationModelConfigClipVisionModelSrcAddon
         | Literal['vad']
         | None
     ) = None
 
 
-class LoadModelBySrcRequestSdcppGenerationModelConfigUpscalerModelSrc2Addon1(Enum):
+class LoadModelSrcRequestSdcppGenerationModelConfigUpscalerModelSrcAddon(Enum):
     llamacpp_completion = 'llamacpp-completion'
     whispercpp_transcription = 'whispercpp-transcription'
     bci_whispercpp_transcription = 'bci-whispercpp-transcription'
@@ -3773,7 +3756,7 @@ class LoadModelBySrcRequestSdcppGenerationModelConfigUpscalerModelSrc2Addon1(Enu
     classification = 'classification'
 
 
-class LoadModelBySrcRequestSdcppGenerationModelConfigUpscalerModelSrc2(BaseModel):
+class LoadModelSrcRequestSdcppGenerationModelConfigUpscalerModelSrc(BaseModel):
     src: str
     name: str | None = None
     model_id: str | None = Field(None, alias='modelId')
@@ -3785,13 +3768,13 @@ class LoadModelBySrcRequestSdcppGenerationModelConfigUpscalerModelSrc2(BaseModel
     expected_size: float | None = Field(None, alias='expectedSize')
     sha256_checksum: str | None = Field(None, alias='sha256Checksum')
     addon: (
-        LoadModelBySrcRequestSdcppGenerationModelConfigUpscalerModelSrc2Addon1
+        LoadModelSrcRequestSdcppGenerationModelConfigUpscalerModelSrcAddon
         | Literal['vad']
         | None
     ) = None
 
 
-class LoadModelBySrcRequestSdcppGenerationModelConfigUpscaler(BaseModel):
+class LoadModelSrcRequestSdcppGenerationModelConfigUpscaler(BaseModel):
     model_config = ConfigDict(
         extra='forbid',
     )
@@ -3800,7 +3783,7 @@ class LoadModelBySrcRequestSdcppGenerationModelConfigUpscaler(BaseModel):
         description='Type of upscaler to use for post-generation upscaling when requested in diffusion({ upscale }).',
     )
     model_src: (
-        str | LoadModelBySrcRequestSdcppGenerationModelConfigUpscalerModelSrc2 | None
+        str | LoadModelSrcRequestSdcppGenerationModelConfigUpscalerModelSrc | None
     ) = Field(
         None,
         description="ESRGAN upscaler model (e.g. RealESRGAN_x4plus_anime_6B.pth). Required in diffusion mode when this `upscaler` block is set — configures the post-generation upscaler invoked via diffusion({ upscale }). In `mode: 'upscale'` the primary modelSrc itself is the ESRGAN model, so this field is ignored.",
@@ -3823,33 +3806,31 @@ class LoadModelBySrcRequestSdcppGenerationModelConfigUpscaler(BaseModel):
     )
 
 
-class LoadModelBySrcRequestSdcppGenerationModelConfig(BaseModel):
-    mode: LoadModelBySrcRequestSdcppGenerationModelConfigMode | None = Field(
+class LoadModelSrcRequestSdcppGenerationModelConfig(BaseModel):
+    mode: LoadModelSrcRequestSdcppGenerationModelConfigMode | None = Field(
         'diffusion',
         description="Operation mode for the diffusion plugin. `'diffusion'` (default) builds a full SD / SDXL / SD3 / FLUX pipeline from the primary model plus optional auxiliary text encoders, VAE, and ESRGAN upscaler, and exposes diffusion({ ... }). `'upscale'` builds a standalone ESRGAN upscaler from the primary model file alone (auxiliary model sources are ignored) and exposes upscale({ ... }). `'video'` builds a Wan `VideoStableDiffusion` pipeline and exposes video({ ... }). On React Native, loading the video model on-device will likely fail because the video diffusion models currently shipped by the SDK are too large to load on typical mobile devices; pass a `delegate` to `loadModel(...)` to run generation on a desktop peer instead.",
-        title='LoadModelBySrcRequestSdcppGenerationModelConfigMode',
+        title='LoadModelSrcRequestSdcppGenerationModelConfigMode',
     )
     threads: float | None = None
-    device: LoadModelBySrcRequestSdcppGenerationModelConfigDevice | None = Field(
-        None, title='LoadModelBySrcRequestSdcppGenerationModelConfigDevice'
+    device: LoadModelSrcRequestSdcppGenerationModelConfigDevice | None = Field(
+        None, title='LoadModelSrcRequestSdcppGenerationModelConfigDevice'
     )
-    prediction: LoadModelBySrcRequestSdcppGenerationModelConfigPrediction | None = (
-        Field(
-            None,
-            description='Prediction type; auto-detected from model when omitted',
-            title='LoadModelBySrcRequestSdcppGenerationModelConfigPrediction',
-        )
+    prediction: LoadModelSrcRequestSdcppGenerationModelConfigPrediction | None = Field(
+        None,
+        description='Prediction type; auto-detected from model when omitted',
+        title='LoadModelSrcRequestSdcppGenerationModelConfigPrediction',
     )
-    type: LoadModelBySrcRequestSdcppGenerationModelConfigType | None = Field(
+    type: LoadModelSrcRequestSdcppGenerationModelConfigType | None = Field(
         None,
         description='Weight quantization type override; auto-detected when omitted',
-        title='LoadModelBySrcRequestSdcppGenerationModelConfigType',
+        title='LoadModelSrcRequestSdcppGenerationModelConfigType',
     )
-    rng: LoadModelBySrcRequestSdcppGenerationModelConfigRng | None = Field(
-        None, title='LoadModelBySrcRequestSdcppGenerationModelConfigRng'
+    rng: LoadModelSrcRequestSdcppGenerationModelConfigRng | None = Field(
+        None, title='LoadModelSrcRequestSdcppGenerationModelConfigRng'
     )
-    sampler_rng: LoadModelBySrcRequestSdcppGenerationModelConfigSamplerRng | None = (
-        Field(None, title='LoadModelBySrcRequestSdcppGenerationModelConfigSamplerRng')
+    sampler_rng: LoadModelSrcRequestSdcppGenerationModelConfigSamplerRng | None = Field(
+        None, title='LoadModelSrcRequestSdcppGenerationModelConfigSamplerRng'
     )
     clip_on_cpu: bool | None = Field(
         None, description='Force CLIP text encoder to run on CPU'
@@ -3869,43 +3850,43 @@ class LoadModelBySrcRequestSdcppGenerationModelConfig(BaseModel):
         None, description='Enable flash attention for the diffusion transformer only'
     )
     lora_apply_mode: (
-        LoadModelBySrcRequestSdcppGenerationModelConfigLoraApplyMode | None
+        LoadModelSrcRequestSdcppGenerationModelConfigLoraApplyMode | None
     ) = Field(
         None,
         description="How LoRA adapters passed via diffusion({ lora }) are applied. 'auto' (default): picked based on weight type — 'at_runtime' for quantized weights, 'immediately' for full-precision. 'immediately': adapter is fused into the model on first use and persists across subsequent diffusion() calls until the model is unloaded. 'at_runtime': adapter is applied per-call and not persisted.",
-        title='LoadModelBySrcRequestSdcppGenerationModelConfigLoraApplyMode',
+        title='LoadModelSrcRequestSdcppGenerationModelConfigLoraApplyMode',
     )
     verbosity: float | None = None
     clip_l_model_src: (
-        str | LoadModelBySrcRequestSdcppGenerationModelConfigClipLModelSrc2 | None
+        str | LoadModelSrcRequestSdcppGenerationModelConfigClipLModelSrc | None
     ) = Field(
         None,
         alias='clipLModelSrc',
         description='CLIP-L text encoder model — required for SD3',
     )
     clip_g_model_src: (
-        str | LoadModelBySrcRequestSdcppGenerationModelConfigClipGModelSrc2 | None
+        str | LoadModelSrcRequestSdcppGenerationModelConfigClipGModelSrc | None
     ) = Field(
         None,
         alias='clipGModelSrc',
         description='CLIP-G text encoder model — required for SDXL and SD3',
     )
     t5_xxl_model_src: (
-        str | LoadModelBySrcRequestSdcppGenerationModelConfigT5XxlModelSrc2 | None
+        str | LoadModelSrcRequestSdcppGenerationModelConfigT5XxlModelSrc | None
     ) = Field(
         None,
         alias='t5XxlModelSrc',
         description='T5-XXL text encoder model — required for SD3',
     )
     llm_model_src: (
-        str | LoadModelBySrcRequestSdcppGenerationModelConfigLlmModelSrc2 | None
+        str | LoadModelSrcRequestSdcppGenerationModelConfigLlmModelSrc | None
     ) = Field(
         None,
         alias='llmModelSrc',
         description='LLM text encoder model (e.g. Qwen3) — required for FLUX.2 [klein]',
     )
     vae_model_src: (
-        str | LoadModelBySrcRequestSdcppGenerationModelConfigVaeModelSrc2 | None
+        str | LoadModelSrcRequestSdcppGenerationModelConfigVaeModelSrc | None
     ) = Field(
         None,
         alias='vaeModelSrc',
@@ -3913,7 +3894,7 @@ class LoadModelBySrcRequestSdcppGenerationModelConfig(BaseModel):
     )
     high_noise_diffusion_model_src: (
         str
-        | LoadModelBySrcRequestSdcppGenerationModelConfigHighNoiseDiffusionModelSrc2
+        | LoadModelSrcRequestSdcppGenerationModelConfigHighNoiseDiffusionModelSrc
         | None
     ) = Field(
         None,
@@ -3921,20 +3902,20 @@ class LoadModelBySrcRequestSdcppGenerationModelConfig(BaseModel):
         description='High-noise diffusion expert — required for Wan 2.2 mixture-of-experts video models',
     )
     clip_vision_model_src: (
-        str | LoadModelBySrcRequestSdcppGenerationModelConfigClipVisionModelSrc2 | None
+        str | LoadModelSrcRequestSdcppGenerationModelConfigClipVisionModelSrc | None
     ) = Field(
         None,
         alias='clipVisionModelSrc',
         description='OpenCLIP ViT-H/14 weights (`clip_vision_h.safetensors`). Required for Wan image-to-video (`img2vid`); omit for text-to-video-only pipelines.',
     )
-    upscaler: LoadModelBySrcRequestSdcppGenerationModelConfigUpscaler | None = Field(
+    upscaler: LoadModelSrcRequestSdcppGenerationModelConfigUpscaler | None = Field(
         None,
         description="ESRGAN upscaler configuration. In diffusion mode this enables the post-generation upscale path invoked via diffusion({ upscale }) and requires `model_src`. In `mode: 'upscale'` only the tuning fields (tile_size, direct, offload_params_to_cpu, threads) are honored — the primary modelSrc IS the ESRGAN model in that mode and `model_src` here is ignored. In `mode: 'video'` the entire `upscaler` object is ignored. Mode-dependent constraints (e.g. `model_src` required in diffusion mode) are enforced by the sdcpp-generation plugin at load time, not at the schema layer.",
-        title='LoadModelBySrcRequestSdcppGenerationModelConfigUpscaler',
+        title='LoadModelSrcRequestSdcppGenerationModelConfigUpscaler',
     )
 
 
-class LoadModelBySrcRequestSdcppGeneration(BaseModel):
+class LoadModelSrcRequestSdcppGeneration(BaseModel):
     model_config = ConfigDict(
         extra='forbid',
     )
@@ -3943,8 +3924,8 @@ class LoadModelBySrcRequestSdcppGeneration(BaseModel):
     model_name: str | None = Field(None, alias='modelName')
     with_progress: bool | None = Field(None, alias='withProgress')
     seed: bool | None = None
-    delegate: LoadModelBySrcRequestSdcppGenerationDelegate | None = Field(
-        None, title='LoadModelBySrcRequestSdcppGenerationDelegate'
+    delegate: LoadModelSrcRequestSdcppGenerationDelegate | None = Field(
+        None, title='LoadModelSrcRequestSdcppGenerationDelegate'
     )
     request_id: constr(min_length=1) | None = Field(
         None,
@@ -3952,14 +3933,12 @@ class LoadModelBySrcRequestSdcppGeneration(BaseModel):
         description='Stable identifier for this in-flight load, generated by the client at call time. Optional on the wire so legacy clients keep working — the server falls back to a server-generated id when the field is missing. Exposed on the client-side decorated promise so callers can target this load with `cancel({ requestId })`.',
     )
     model_type: Literal['sdcpp-generation'] = Field(..., alias='modelType')
-    model_config_: LoadModelBySrcRequestSdcppGenerationModelConfig | None = Field(
-        None,
-        alias='modelConfig',
-        title='LoadModelBySrcRequestSdcppGenerationModelConfig',
+    model_config_: LoadModelSrcRequestSdcppGenerationModelConfig | None = Field(
+        None, alias='modelConfig', title='LoadModelSrcRequestSdcppGenerationModelConfig'
     )
 
 
-class LoadModelBySrcRequestGgmlVlaDelegate(BaseModel):
+class LoadModelSrcRequestGgmlVlaDelegate(BaseModel):
     provider_public_key: constr(pattern=r'^[0-9a-fA-F]{64}$') = Field(
         ...,
         alias='providerPublicKey',
@@ -3985,16 +3964,16 @@ class LoadModelBySrcRequestGgmlVlaDelegate(BaseModel):
     )
 
 
-class LoadModelBySrcRequestGgmlVlaModelConfigBackend(Enum):
+class LoadModelSrcRequestGgmlVlaModelConfigBackend(Enum):
     auto = 'auto'
     cpu = 'cpu'
 
 
-class LoadModelBySrcRequestGgmlVlaModelConfig(BaseModel):
-    backend: LoadModelBySrcRequestGgmlVlaModelConfigBackend | None = Field(
+class LoadModelSrcRequestGgmlVlaModelConfig(BaseModel):
+    backend: LoadModelSrcRequestGgmlVlaModelConfigBackend | None = Field(
         None,
         description="Backend selection passed to `VlaModel.load({ backend })`. `'auto'` (default) prefers an accepted GPU (Vulkan / Metal / OpenCL) and falls back to CPU. `'cpu'` forces CPU regardless of available accelerators.",
-        title='LoadModelBySrcRequestGgmlVlaModelConfigBackend',
+        title='LoadModelSrcRequestGgmlVlaModelConfigBackend',
     )
     verbosity: conint(ge=-9007199254740991, le=9007199254740991) | None = Field(
         None,
@@ -4002,7 +3981,7 @@ class LoadModelBySrcRequestGgmlVlaModelConfig(BaseModel):
     )
 
 
-class LoadModelBySrcRequestGgmlVla(BaseModel):
+class LoadModelSrcRequestGgmlVla(BaseModel):
     model_config = ConfigDict(
         extra='forbid',
     )
@@ -4011,8 +3990,8 @@ class LoadModelBySrcRequestGgmlVla(BaseModel):
     model_name: str | None = Field(None, alias='modelName')
     with_progress: bool | None = Field(None, alias='withProgress')
     seed: bool | None = None
-    delegate: LoadModelBySrcRequestGgmlVlaDelegate | None = Field(
-        None, title='LoadModelBySrcRequestGgmlVlaDelegate'
+    delegate: LoadModelSrcRequestGgmlVlaDelegate | None = Field(
+        None, title='LoadModelSrcRequestGgmlVlaDelegate'
     )
     request_id: constr(min_length=1) | None = Field(
         None,
@@ -4020,12 +3999,12 @@ class LoadModelBySrcRequestGgmlVla(BaseModel):
         description='Stable identifier for this in-flight load, generated by the client at call time. Optional on the wire so legacy clients keep working — the server falls back to a server-generated id when the field is missing. Exposed on the client-side decorated promise so callers can target this load with `cancel({ requestId })`.',
     )
     model_type: Literal['ggml-vla'] = Field(..., alias='modelType')
-    model_config_: LoadModelBySrcRequestGgmlVlaModelConfig | None = Field(
-        None, alias='modelConfig', title='LoadModelBySrcRequestGgmlVlaModelConfig'
+    model_config_: LoadModelSrcRequestGgmlVlaModelConfig | None = Field(
+        None, alias='modelConfig', title='LoadModelSrcRequestGgmlVlaModelConfig'
     )
 
 
-class LoadModelBySrcRequestGgmlClassificationDelegate(BaseModel):
+class LoadModelSrcRequestGgmlClassificationDelegate(BaseModel):
     provider_public_key: constr(pattern=r'^[0-9a-fA-F]{64}$') = Field(
         ...,
         alias='providerPublicKey',
@@ -4051,7 +4030,7 @@ class LoadModelBySrcRequestGgmlClassificationDelegate(BaseModel):
     )
 
 
-class LoadModelBySrcRequestGgmlClassificationModelConfig(BaseModel):
+class LoadModelSrcRequestGgmlClassificationModelConfig(BaseModel):
     model_path: str | None = Field(None, alias='modelPath')
     top_k: conint(ge=-9007199254740991, le=9007199254740991) | None = Field(
         None, alias='topK'
@@ -4059,7 +4038,7 @@ class LoadModelBySrcRequestGgmlClassificationModelConfig(BaseModel):
     native_logger: bool | None = Field(None, alias='nativeLogger')
 
 
-class LoadModelBySrcRequestGgmlClassification(BaseModel):
+class LoadModelSrcRequestGgmlClassification(BaseModel):
     model_config = ConfigDict(
         extra='forbid',
     )
@@ -4068,8 +4047,8 @@ class LoadModelBySrcRequestGgmlClassification(BaseModel):
     model_name: str | None = Field(None, alias='modelName')
     with_progress: bool | None = Field(None, alias='withProgress')
     seed: bool | None = None
-    delegate: LoadModelBySrcRequestGgmlClassificationDelegate | None = Field(
-        None, title='LoadModelBySrcRequestGgmlClassificationDelegate'
+    delegate: LoadModelSrcRequestGgmlClassificationDelegate | None = Field(
+        None, title='LoadModelSrcRequestGgmlClassificationDelegate'
     )
     request_id: constr(min_length=1) | None = Field(
         None,
@@ -4077,14 +4056,14 @@ class LoadModelBySrcRequestGgmlClassification(BaseModel):
         description='Stable identifier for this in-flight load, generated by the client at call time. Optional on the wire so legacy clients keep working — the server falls back to a server-generated id when the field is missing. Exposed on the client-side decorated promise so callers can target this load with `cancel({ requestId })`.',
     )
     model_type: Literal['ggml-classification'] = Field(..., alias='modelType')
-    model_config_: LoadModelBySrcRequestGgmlClassificationModelConfig | None = Field(
+    model_config_: LoadModelSrcRequestGgmlClassificationModelConfig | None = Field(
         None,
         alias='modelConfig',
-        title='LoadModelBySrcRequestGgmlClassificationModelConfig',
+        title='LoadModelSrcRequestGgmlClassificationModelConfig',
     )
 
 
-class LoadModelBySrcRequest12Delegate(BaseModel):
+class LoadModelCustomPluginRequestDelegate(BaseModel):
     provider_public_key: constr(pattern=r'^[0-9a-fA-F]{64}$') = Field(
         ...,
         alias='providerPublicKey',
@@ -4110,18 +4089,18 @@ class LoadModelBySrcRequest12Delegate(BaseModel):
     )
 
 
-class LoadModelBySrcRequest12ModelConfig(RootModel[dict[str, Any]]):
-    root: dict[str, Any] = Field(..., title='LoadModelBySrcRequest12ModelConfig')
+class LoadModelCustomPluginRequestModelConfig(RootModel[dict[str, Any]]):
+    root: dict[str, Any] = Field(..., title='LoadModelCustomPluginRequestModelConfig')
 
 
-class LoadModelBySrcRequest12(BaseModel):
+class LoadModelCustomPluginRequest(BaseModel):
     type: Literal['loadModel']
     model_src: str = Field(..., alias='modelSrc')
     model_name: str | None = Field(None, alias='modelName')
     with_progress: bool | None = Field(None, alias='withProgress')
     seed: bool | None = None
-    delegate: LoadModelBySrcRequest12Delegate | None = Field(
-        None, title='LoadModelBySrcRequest12Delegate'
+    delegate: LoadModelCustomPluginRequestDelegate | None = Field(
+        None, title='LoadModelCustomPluginRequestDelegate'
     )
     request_id: constr(min_length=1) | None = Field(
         None,
@@ -4129,54 +4108,54 @@ class LoadModelBySrcRequest12(BaseModel):
         description='Stable identifier for this in-flight load, generated by the client at call time. Optional on the wire so legacy clients keep working — the server falls back to a server-generated id when the field is missing. Exposed on the client-side decorated promise so callers can target this load with `cancel({ requestId })`.',
     )
     model_type: str = Field(..., alias='modelType')
-    model_config_: LoadModelBySrcRequest12ModelConfig | None = Field(
-        None, alias='modelConfig', title='LoadModelBySrcRequest12ModelConfig'
+    model_config_: LoadModelCustomPluginRequestModelConfig | None = Field(
+        None, alias='modelConfig', title='LoadModelCustomPluginRequestModelConfig'
     )
 
 
-class LoadModelBySrcRequest(
+class LoadModelSrcRequest(
     RootModel[
-        LoadModelBySrcRequestLlamacppCompletion
-        | LoadModelBySrcRequestWhispercppTranscription
-        | LoadModelBySrcRequestBciWhispercppTranscription
-        | LoadModelBySrcRequestParakeetTranscription
-        | LoadModelBySrcRequestLlamacppEmbedding
-        | LoadModelBySrcRequestNmtcppTranslation
-        | LoadModelBySrcRequestTtsGgml
-        | LoadModelBySrcRequestGgmlOcr
-        | LoadModelBySrcRequestSdcppGeneration
-        | LoadModelBySrcRequestGgmlVla
-        | LoadModelBySrcRequestGgmlClassification
-        | LoadModelBySrcRequest12
+        LoadModelSrcRequestLlamacppCompletion
+        | LoadModelSrcRequestWhispercppTranscription
+        | LoadModelSrcRequestBciWhispercppTranscription
+        | LoadModelSrcRequestParakeetTranscription
+        | LoadModelSrcRequestLlamacppEmbedding
+        | LoadModelSrcRequestNmtcppTranslation
+        | LoadModelSrcRequestTtsGgml
+        | LoadModelSrcRequestGgmlOcr
+        | LoadModelSrcRequestSdcppGeneration
+        | LoadModelSrcRequestGgmlVla
+        | LoadModelSrcRequestGgmlClassification
+        | LoadModelCustomPluginRequest
     ]
 ):
     root: (
-        LoadModelBySrcRequestLlamacppCompletion
-        | LoadModelBySrcRequestWhispercppTranscription
-        | LoadModelBySrcRequestBciWhispercppTranscription
-        | LoadModelBySrcRequestParakeetTranscription
-        | LoadModelBySrcRequestLlamacppEmbedding
-        | LoadModelBySrcRequestNmtcppTranslation
-        | LoadModelBySrcRequestTtsGgml
-        | LoadModelBySrcRequestGgmlOcr
-        | LoadModelBySrcRequestSdcppGeneration
-        | LoadModelBySrcRequestGgmlVla
-        | LoadModelBySrcRequestGgmlClassification
-        | LoadModelBySrcRequest12
-    ) = Field(..., title='LoadModelBySrcRequest')
+        LoadModelSrcRequestLlamacppCompletion
+        | LoadModelSrcRequestWhispercppTranscription
+        | LoadModelSrcRequestBciWhispercppTranscription
+        | LoadModelSrcRequestParakeetTranscription
+        | LoadModelSrcRequestLlamacppEmbedding
+        | LoadModelSrcRequestNmtcppTranslation
+        | LoadModelSrcRequestTtsGgml
+        | LoadModelSrcRequestGgmlOcr
+        | LoadModelSrcRequestSdcppGeneration
+        | LoadModelSrcRequestGgmlVla
+        | LoadModelSrcRequestGgmlClassification
+        | LoadModelCustomPluginRequest
+    ) = Field(..., title='LoadModelSrcRequest')
 
 
-class ReloadModelConfigRequest1ModelType(Enum):
+class ReloadConfigRequestModelType(Enum):
     whisper = 'whisper'
     whispercpp_transcription = 'whispercpp-transcription'
 
 
-class ReloadModelConfigRequest1ModelConfigStrategy(Enum):
+class ReloadConfigRequestModelConfigStrategy(Enum):
     greedy = 'greedy'
     beam_search = 'beam_search'
 
 
-class ReloadModelConfigRequest1ModelConfigVadParams(BaseModel):
+class ReloadConfigRequestModelConfigVadParams(BaseModel):
     threshold: float | None = None
     min_speech_duration_ms: float | None = None
     min_silence_duration_ms: float | None = None
@@ -4185,23 +4164,23 @@ class ReloadModelConfigRequest1ModelConfigVadParams(BaseModel):
     samples_overlap: float | None = None
 
 
-class ReloadModelConfigRequest1ModelConfigAudioFormat(Enum):
+class ReloadConfigRequestModelConfigAudioFormat(Enum):
     f32le = 'f32le'
     s16le = 's16le'
 
 
-class ReloadModelConfigRequest1ModelConfigContextParams(BaseModel):
+class ReloadConfigRequestModelConfigContextParams(BaseModel):
     model: str | None = None
     use_gpu: bool | None = None
     flash_attn: bool | None = None
     gpu_device: float | None = None
 
 
-class ReloadModelConfigRequest1ModelConfigMiscConfig(BaseModel):
+class ReloadConfigRequestModelConfigMiscConfig(BaseModel):
     caption_enabled: bool | None = None
 
 
-class ReloadModelConfigRequest1ModelConfigVadModelSrc2Addon1(Enum):
+class ReloadConfigRequestModelConfigVadModelSrcAddon(Enum):
     llamacpp_completion = 'llamacpp-completion'
     whispercpp_transcription = 'whispercpp-transcription'
     bci_whispercpp_transcription = 'bci-whispercpp-transcription'
@@ -4227,7 +4206,7 @@ class ReloadModelConfigRequest1ModelConfigVadModelSrc2Addon1(Enum):
     classification = 'classification'
 
 
-class ReloadModelConfigRequest1ModelConfigVadModelSrc2(BaseModel):
+class ReloadConfigRequestModelConfigVadModelSrc(BaseModel):
     src: str
     name: str | None = None
     model_id: str | None = Field(None, alias='modelId')
@@ -4238,14 +4217,12 @@ class ReloadModelConfigRequest1ModelConfigVadModelSrc2(BaseModel):
     engine: str | None = None
     expected_size: float | None = Field(None, alias='expectedSize')
     sha256_checksum: str | None = Field(None, alias='sha256Checksum')
-    addon: (
-        ReloadModelConfigRequest1ModelConfigVadModelSrc2Addon1 | Literal['vad'] | None
-    ) = None
+    addon: ReloadConfigRequestModelConfigVadModelSrcAddon | Literal['vad'] | None = None
 
 
-class ReloadModelConfigRequest1ModelConfig(BaseModel):
-    strategy: ReloadModelConfigRequest1ModelConfigStrategy | None = Field(
-        None, title='ReloadModelConfigRequest1ModelConfigStrategy'
+class ReloadConfigRequestModelConfig(BaseModel):
+    strategy: ReloadConfigRequestModelConfigStrategy | None = Field(
+        None, title='ReloadConfigRequestModelConfigStrategy'
     )
     n_threads: conint(ge=-9007199254740991, le=9007199254740991) | None = None
     n_max_text_ctx: conint(ge=-9007199254740991, le=9007199254740991) | None = None
@@ -4283,45 +4260,39 @@ class ReloadModelConfigRequest1ModelConfig(BaseModel):
     beam_search_beam_size: conint(ge=-9007199254740991, le=9007199254740991) | None = (
         None
     )
-    vad_params: ReloadModelConfigRequest1ModelConfigVadParams | None = Field(
-        None, title='ReloadModelConfigRequest1ModelConfigVadParams'
+    vad_params: ReloadConfigRequestModelConfigVadParams | None = Field(
+        None, title='ReloadConfigRequestModelConfigVadParams'
     )
-    audio_format: ReloadModelConfigRequest1ModelConfigAudioFormat | None = Field(
-        None, title='ReloadModelConfigRequest1ModelConfigAudioFormat'
+    audio_format: ReloadConfigRequestModelConfigAudioFormat | None = Field(
+        None, title='ReloadConfigRequestModelConfigAudioFormat'
     )
-    context_params: ReloadModelConfigRequest1ModelConfigContextParams | None = Field(
-        None,
-        alias='contextParams',
-        title='ReloadModelConfigRequest1ModelConfigContextParams',
+    context_params: ReloadConfigRequestModelConfigContextParams | None = Field(
+        None, alias='contextParams', title='ReloadConfigRequestModelConfigContextParams'
     )
-    misc_config: ReloadModelConfigRequest1ModelConfigMiscConfig | None = Field(
-        None, alias='miscConfig', title='ReloadModelConfigRequest1ModelConfigMiscConfig'
+    misc_config: ReloadConfigRequestModelConfigMiscConfig | None = Field(
+        None, alias='miscConfig', title='ReloadConfigRequestModelConfigMiscConfig'
     )
-    vad_model_src: str | ReloadModelConfigRequest1ModelConfigVadModelSrc2 | None = (
-        Field(None, alias='vadModelSrc')
+    vad_model_src: str | ReloadConfigRequestModelConfigVadModelSrc | None = Field(
+        None, alias='vadModelSrc'
     )
 
 
-class ReloadModelConfigRequest1(BaseModel):
+class ReloadConfigRequest(BaseModel):
     type: Literal['loadModel']
     model_id: constr(pattern=r'^[0-9a-f]{16}$') = Field(..., alias='modelId')
     model_src: Any | None = Field(None, alias='modelSrc')
     with_progress: Any | None = Field(None, alias='withProgress')
     delegate: Any | None = None
     seed: Any | None = None
-    model_type: ReloadModelConfigRequest1ModelType = Field(
+    model_type: ReloadConfigRequestModelType = Field(
         ...,
         alias='modelType',
         description='Whisper model type: "whisper" (alias) or "whispercpp-transcription" (canonical)',
-        title='ReloadModelConfigRequest1ModelType',
+        title='ReloadConfigRequestModelType',
     )
-    model_config_: ReloadModelConfigRequest1ModelConfig = Field(
-        ..., alias='modelConfig', title='ReloadModelConfigRequest1ModelConfig'
+    model_config_: ReloadConfigRequestModelConfig = Field(
+        ..., alias='modelConfig', title='ReloadConfigRequestModelConfig'
     )
-
-
-class ReloadModelConfigRequest(RootModel[ReloadModelConfigRequest1]):
-    root: ReloadModelConfigRequest1 = Field(..., title='ReloadModelConfigRequest')
 
 
 class LoadModelResponse(BaseModel):
@@ -6135,8 +6106,8 @@ class Request_3(
     )
 
 
-class Request_4(RootModel[LoadModelBySrcRequest | ReloadModelConfigRequest]):
-    root: LoadModelBySrcRequest | ReloadModelConfigRequest = Field(
+class Request_4(RootModel[LoadModelSrcRequest | ReloadConfigRequest]):
+    root: LoadModelSrcRequest | ReloadConfigRequest = Field(
         ..., title='LoadModelRequest'
     )
 

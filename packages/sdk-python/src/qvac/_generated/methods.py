@@ -32,6 +32,7 @@ from . import (
     DownloadAssetResponse,
     EmbedRequest,
     EmbedResponse,
+    FinetuneProgressResponse,
     FinetuneRequest,
     FinetuneResponse,
     GetLoadedModelInfoRequest,
@@ -44,6 +45,7 @@ from . import (
     LoadModelResponse,
     LoggingStreamRequest,
     LoggingStreamResponse,
+    ModelProgressResponse,
     ModelRegistryGetModelRequest,
     ModelRegistryGetModelResponse,
     ModelRegistryListRequest,
@@ -58,6 +60,7 @@ from . import (
     PluginInvokeStreamResponse,
     ProvideRequest,
     ProvideResponse,
+    RagProgressResponse,
     RagRequest,
     RagResponse,
     ResumeRequest,
@@ -146,6 +149,23 @@ def download_asset(
     return DownloadAssetResponse.model_validate(transport.call(payload))
 
 
+def download_asset_with_progress(
+    transport: Transport, params: DownloadAssetRequest
+) -> Iterator[ModelProgressResponse | DownloadAssetResponse]:
+    # Progress events and the terminal reply both arrive through the
+    # same stream, distinguished only by each payload's own `type` —
+    # call_stream already falls back cleanly to a single terminal
+    # chunk if the server ends up replying unary instead (e.g. an
+    # operation that doesn't support progress for this method).
+    payload = params.model_dump(mode="json", by_alias=True, exclude_unset=True)
+    payload["withProgress"] = True
+    for chunk in transport.call_stream(payload):
+        if chunk.get("type") == "modelProgress":
+            yield ModelProgressResponse.model_validate(chunk)
+        else:
+            yield DownloadAssetResponse.model_validate(chunk)
+
+
 def embed(transport: Transport, params: EmbedRequest) -> EmbedResponse:
     payload = params.model_dump(mode="json", by_alias=True, exclude_unset=True)
     return EmbedResponse.model_validate(transport.call(payload))
@@ -154,6 +174,23 @@ def embed(transport: Transport, params: EmbedRequest) -> EmbedResponse:
 def finetune(transport: Transport, params: FinetuneRequest) -> FinetuneResponse:
     payload = params.model_dump(mode="json", by_alias=True, exclude_unset=True)
     return FinetuneResponse.model_validate(transport.call(payload))
+
+
+def finetune_with_progress(
+    transport: Transport, params: FinetuneRequest
+) -> Iterator[FinetuneProgressResponse | FinetuneResponse]:
+    # Progress events and the terminal reply both arrive through the
+    # same stream, distinguished only by each payload's own `type` —
+    # call_stream already falls back cleanly to a single terminal
+    # chunk if the server ends up replying unary instead (e.g. an
+    # operation that doesn't support progress for this method).
+    payload = params.model_dump(mode="json", by_alias=True, exclude_unset=True)
+    payload["withProgress"] = True
+    for chunk in transport.call_stream(payload):
+        if chunk.get("type") == "finetune:progress":
+            yield FinetuneProgressResponse.model_validate(chunk)
+        else:
+            yield FinetuneResponse.model_validate(chunk)
 
 
 def get_loaded_model_info(
@@ -178,6 +215,23 @@ def heartbeat(transport: Transport, params: HeartbeatRequest) -> HeartbeatRespon
 def load_model(transport: Transport, params: LoadModelRequest) -> LoadModelResponse:
     payload = params.model_dump(mode="json", by_alias=True, exclude_unset=True)
     return LoadModelResponse.model_validate(transport.call(payload))
+
+
+def load_model_with_progress(
+    transport: Transport, params: LoadModelRequest
+) -> Iterator[ModelProgressResponse | LoadModelResponse]:
+    # Progress events and the terminal reply both arrive through the
+    # same stream, distinguished only by each payload's own `type` —
+    # call_stream already falls back cleanly to a single terminal
+    # chunk if the server ends up replying unary instead (e.g. an
+    # operation that doesn't support progress for this method).
+    payload = params.model_dump(mode="json", by_alias=True, exclude_unset=True)
+    payload["withProgress"] = True
+    for chunk in transport.call_stream(payload):
+        if chunk.get("type") == "modelProgress":
+            yield ModelProgressResponse.model_validate(chunk)
+        else:
+            yield LoadModelResponse.model_validate(chunk)
 
 
 def logging_stream(
@@ -240,6 +294,23 @@ def provide(transport: Transport, params: ProvideRequest) -> ProvideResponse:
 def rag(transport: Transport, params: RagRequest) -> RagResponse:
     payload = params.model_dump(mode="json", by_alias=True, exclude_unset=True)
     return RagResponse.model_validate(transport.call(payload))
+
+
+def rag_with_progress(
+    transport: Transport, params: RagRequest
+) -> Iterator[RagProgressResponse | RagResponse]:
+    # Progress events and the terminal reply both arrive through the
+    # same stream, distinguished only by each payload's own `type` —
+    # call_stream already falls back cleanly to a single terminal
+    # chunk if the server ends up replying unary instead (e.g. an
+    # operation that doesn't support progress for this method).
+    payload = params.model_dump(mode="json", by_alias=True, exclude_unset=True)
+    payload["withProgress"] = True
+    for chunk in transport.call_stream(payload):
+        if chunk.get("type") == "rag:progress":
+            yield RagProgressResponse.model_validate(chunk)
+        else:
+            yield RagResponse.model_validate(chunk)
 
 
 def resume(transport: Transport, params: ResumeRequest) -> ResumeResponse:
