@@ -228,6 +228,16 @@ inline js_value_t* reload(js_env_t* env, js_callback_info_t* info) try {
 }
 JSCATCH
 
+// Portable environment-variable set (POSIX setenv vs Windows _putenv_s).  Used
+// to force the fused-op flags on before the GPU denoiser graph is built.
+inline void dnSetenv(const char* name, const char* value) {
+#if defined(_WIN32)
+  _putenv_s(name, value);
+#else
+  ::setenv(name, value, 1);
+#endif
+}
+
 // denoiserBench(modelPath): A/B the LavaSR denoiser on GPU (OpenCL, fused ops)
 // vs scalar CPU over a fixed synthetic input, returning timing + parity so a
 // mobile test can log per-device GPU-vs-CPU numbers.  A ggml-CPU "twin"
@@ -242,11 +252,11 @@ inline js_value_t* denoiserBench(js_env_t* env, js_callback_info_t* info) try {
   auto modelPath = js::String(env, args.get(0, "modelPath")).as<std::string>(env);
 
   // Force the fused OpenCL ops on for the GPU denoiser graph.
-  ::setenv("LAVASR_DN_GRU_OP", "1", 1);
-  ::setenv("LAVASR_DN_DW_OP", "1", 1);
-  ::setenv("LAVASR_DN_UPS_OP", "1", 1);
-  ::setenv("LAVASR_DN_SHUF_OP", "1", 1);
-  ::setenv("LAVASR_DN_AP_OP", "1", 1);
+  dnSetenv("LAVASR_DN_GRU_OP", "1");
+  dnSetenv("LAVASR_DN_DW_OP", "1");
+  dnSetenv("LAVASR_DN_UPS_OP", "1");
+  dnSetenv("LAVASR_DN_SHUF_OP", "1");
+  dnSetenv("LAVASR_DN_AP_OP", "1");
 
   constexpr int    kSr      = 16000;
   constexpr double kSeconds = 10.0;
