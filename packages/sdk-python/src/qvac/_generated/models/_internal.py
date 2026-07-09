@@ -26,6 +26,514 @@ class FieldQvacSdkWireContract(RootModel[Any]):
     )
 
 
+class BatchCompletionStreamRequestPromptsItemHistoryItemAttachmentsItem(BaseModel):
+    path: str = Field(
+        ...,
+        description='Absolute or SDK-resolvable path to the attachment file (e.g., image for multimodal models).',
+    )
+
+
+class BatchCompletionStreamRequestPromptsItemHistoryItem(BaseModel):
+    role: str = Field(
+        ..., description='Message role (e.g., `"user"`, `"assistant"`, `"system"`).'
+    )
+    content: str = Field(..., description='Message content.')
+    attachments: (
+        list[BatchCompletionStreamRequestPromptsItemHistoryItemAttachmentsItem] | None
+    ) = Field(None, description='Optional file attachments for multimodal models.')
+
+
+class BatchCompletionStreamRequestPromptsItemGenerationParams(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    temp: float | None = Field(
+        None, description='Sampling temperature (typically 0–2).'
+    )
+    top_p: float | None = Field(
+        None, description='Top-p (nucleus) sampling cutoff (0–1).'
+    )
+    top_k: float | None = Field(
+        None, description='Top-k sampling — keep only the top K tokens.'
+    )
+    predict: float | None = Field(
+        None,
+        description='Max tokens to predict. `-1` = until stop token, `-2` = until context filled.',
+    )
+    seed: float | None = Field(None, description='Random seed for reproducibility.')
+    frequency_penalty: float | None = Field(
+        None, description='Penalty applied to tokens based on frequency so far.'
+    )
+    presence_penalty: float | None = Field(
+        None, description='Penalty applied to tokens that have already appeared.'
+    )
+    repeat_penalty: float | None = Field(
+        None, description='Penalty applied to repeated tokens.'
+    )
+    reasoning_budget: conint(ge=-1, le=2147483647) | None = Field(
+        None,
+        description="Per-request reasoning channel budget. `-1` keeps the model's reasoning channel on; `0` disables it for this request; any positive integer caps the reasoning channel at that many tokens. Equivalent to the load-time `reasoning_budget` config but scoped to a single `run()` call; the prior value is restored afterwards.",
+    )
+    remove_thinking_from_context: bool | None = Field(
+        None,
+        description='When the model emits a reasoning block during generation (e.g. `<think>...</think>` for the Qwen3 family, `<|channel>thought ... <channel|>` for Gemma 4), drop those tokens from the KV cache at end-of-generation so subsequent turns do not accumulate reasoning history. Defaults to `false`. No-op for models without a recognised reasoning channel. Throws on models with recurrent memory (SSM / hybrid SSM such as Qwen3.5), where the cache edit is unsupported.',
+    )
+
+
+class BatchCompletionStreamRequestPromptsItemResponseFormatText(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    type: Literal['text']
+
+
+class BatchCompletionStreamRequestPromptsItemResponseFormatJsonObject(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    type: Literal['json_object']
+
+
+class BatchCompletionStreamRequestPromptsItemResponseFormatJsonSchemaJsonSchemaSchema(
+    RootModel[dict[str, Any]]
+):
+    root: dict[str, Any] = Field(
+        ...,
+        description="JSON Schema the model output must validate against. Forwarded to the addon as-is and converted to GBNF natively by llama.cpp's `json_schema_to_grammar()`.",
+        title='BatchCompletionStreamRequestPromptsItemResponseFormatJsonSchemaJsonSchemaSchema',
+    )
+
+
+class BatchCompletionStreamRequestPromptsItemResponseFormatJsonSchemaJsonSchema(
+    BaseModel
+):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    name: constr(min_length=1) = Field(
+        ...,
+        description='Schema identifier; OpenAI-compatibility only — not used by the addon.',
+    )
+    description: str | None = Field(
+        None,
+        description='Free-form schema description. Accepted for OpenAI compatibility only — not forwarded to the addon and does not affect generation.',
+    )
+    schema_: (
+        BatchCompletionStreamRequestPromptsItemResponseFormatJsonSchemaJsonSchemaSchema
+    ) = Field(
+        ...,
+        alias='schema',
+        description="JSON Schema the model output must validate against. Forwarded to the addon as-is and converted to GBNF natively by llama.cpp's `json_schema_to_grammar()`.",
+        title='BatchCompletionStreamRequestPromptsItemResponseFormatJsonSchemaJsonSchemaSchema',
+    )
+    strict: bool | None = Field(
+        None,
+        description="Accepted for OpenAI compatibility but does NOT trigger OpenAI's auto-tightening semantics (implicit `additionalProperties: false`, all properties required). The schema is forwarded to the addon verbatim, so callers wanting strict validation must encode it explicitly in `schema`.",
+    )
+
+
+class BatchCompletionStreamRequestPromptsItemResponseFormatJsonSchema(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    type: Literal['json_schema']
+    json_schema: (
+        BatchCompletionStreamRequestPromptsItemResponseFormatJsonSchemaJsonSchema
+    ) = Field(
+        ...,
+        title='BatchCompletionStreamRequestPromptsItemResponseFormatJsonSchemaJsonSchema',
+    )
+
+
+class BatchCompletionStreamRequestPromptsItemToolsItemParametersPropertiesValueType(
+    Enum
+):
+    string = 'string'
+    number = 'number'
+    integer = 'integer'
+    boolean = 'boolean'
+    object = 'object'
+    array = 'array'
+
+
+class BatchCompletionStreamRequestPromptsItemToolsItemParametersPropertiesValue(
+    BaseModel
+):
+    type: (
+        BatchCompletionStreamRequestPromptsItemToolsItemParametersPropertiesValueType
+    ) = Field(
+        ...,
+        title='BatchCompletionStreamRequestPromptsItemToolsItemParametersPropertiesValueType',
+    )
+    description: str | None = None
+    enum: list[str] | None = None
+
+
+class BatchCompletionStreamRequestPromptsItemToolsItemParametersProperties(
+    RootModel[
+        dict[
+            str,
+            BatchCompletionStreamRequestPromptsItemToolsItemParametersPropertiesValue,
+        ]
+    ]
+):
+    root: dict[
+        str, BatchCompletionStreamRequestPromptsItemToolsItemParametersPropertiesValue
+    ] = Field(
+        ...,
+        title='BatchCompletionStreamRequestPromptsItemToolsItemParametersProperties',
+    )
+
+
+class BatchCompletionStreamRequestPromptsItemToolsItemParameters(BaseModel):
+    type: Literal['object']
+    properties: BatchCompletionStreamRequestPromptsItemToolsItemParametersProperties = (
+        Field(
+            ...,
+            title='BatchCompletionStreamRequestPromptsItemToolsItemParametersProperties',
+        )
+    )
+    required: list[str] | None = None
+
+
+class BatchCompletionStreamRequestPromptsItemToolsItem(BaseModel):
+    type: Literal['function']
+    name: str
+    description: str
+    parameters: BatchCompletionStreamRequestPromptsItemToolsItemParameters = Field(
+        ..., title='BatchCompletionStreamRequestPromptsItemToolsItemParameters'
+    )
+
+
+class BatchCompletionStreamRequestPromptsItem(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    id: constr(min_length=1) | None = Field(
+        None,
+        description='Optional caller-supplied id used to correlate streamed chunks and final results.',
+    )
+    history: list[BatchCompletionStreamRequestPromptsItemHistoryItem] = Field(
+        ..., description='Array of conversation messages sent to the model.'
+    )
+    generation_params: (
+        BatchCompletionStreamRequestPromptsItemGenerationParams | None
+    ) = Field(
+        None,
+        alias='generationParams',
+        description='Optional per-prompt sampling / generation parameters.',
+        title='BatchCompletionStreamRequestPromptsItemGenerationParams',
+    )
+    response_format: (
+        BatchCompletionStreamRequestPromptsItemResponseFormatText
+        | BatchCompletionStreamRequestPromptsItemResponseFormatJsonObject
+        | BatchCompletionStreamRequestPromptsItemResponseFormatJsonSchema
+        | None
+    ) = Field(
+        None,
+        alias='responseFormat',
+        description='Optional per-prompt structured-output constraint.',
+    )
+    tools: list[BatchCompletionStreamRequestPromptsItemToolsItem] | None = Field(
+        None, description='Resolved per-prompt tools the model can call.'
+    )
+
+
+class BatchCompletionStreamRequestToolDialect(Enum):
+    hermes = 'hermes'
+    pythonic = 'pythonic'
+    json = 'json'
+    harmony = 'harmony'
+    qwen35 = 'qwen35'
+    gemma4 = 'gemma4'
+
+
+class BatchCompletionStreamRequest(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    model_id: str = Field(
+        ...,
+        alias='modelId',
+        description='The identifier of the model to use for batch completion.',
+    )
+    prompts: list[BatchCompletionStreamRequestPromptsItem] = Field(
+        ...,
+        description='Batch prompts submitted to the addon in one run.',
+        min_length=1,
+    )
+    stream: bool | None = Field(
+        None,
+        description='Whether to stream tokens (`true`) or return all events on completion. Defaults to true.',
+    )
+    capture_thinking: bool | None = Field(
+        None,
+        alias='captureThinking',
+        description='When `true`, capture and emit reasoning/thinking deltas separately from content deltas.',
+    )
+    emit_raw_deltas: bool | None = Field(
+        None,
+        alias='emitRawDeltas',
+        description='When `true`, also emit raw per-token deltas in addition to normalized content deltas.',
+    )
+    tool_dialect: BatchCompletionStreamRequestToolDialect | None = Field(
+        None,
+        alias='toolDialect',
+        description='Override auto-detected tool-call dialect for all prompts.',
+        title='BatchCompletionStreamRequestToolDialect',
+    )
+    request_id: constr(min_length=1) | None = Field(
+        None,
+        alias='requestId',
+        description='Stable identifier for this in-flight batch request.',
+    )
+    type: Literal['batchCompletionStream']
+
+
+class BatchCompletionStreamResponseEventsItemEventContentDelta(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    type: Literal['contentDelta']
+    seq: conint(ge=0, le=9007199254740991)
+    text: str
+
+
+class BatchCompletionStreamResponseEventsItemEventRawDelta(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    type: Literal['rawDelta']
+    seq: conint(ge=0, le=9007199254740991)
+    text: str
+
+
+class BatchCompletionStreamResponseEventsItemEventThinkingDelta(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    type: Literal['thinkingDelta']
+    seq: conint(ge=0, le=9007199254740991)
+    text: str
+
+
+class BatchCompletionStreamResponseEventsItemEventToolCallCallArguments(
+    RootModel[dict[str, Any]]
+):
+    root: dict[str, Any] = Field(
+        ..., title='BatchCompletionStreamResponseEventsItemEventToolCallCallArguments'
+    )
+
+
+class BatchCompletionStreamResponseEventsItemEventToolCallCall(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    id: str
+    name: str
+    arguments: BatchCompletionStreamResponseEventsItemEventToolCallCallArguments = (
+        Field(
+            ...,
+            title='BatchCompletionStreamResponseEventsItemEventToolCallCallArguments',
+        )
+    )
+    raw: str | None = None
+
+
+class BatchCompletionStreamResponseEventsItemEventToolCall(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    type: Literal['toolCall']
+    seq: conint(ge=0, le=9007199254740991)
+    call: BatchCompletionStreamResponseEventsItemEventToolCallCall = Field(
+        ..., title='BatchCompletionStreamResponseEventsItemEventToolCallCall'
+    )
+
+
+class BatchCompletionStreamResponseEventsItemEventToolErrorErrorCode(Enum):
+    parse_error = 'PARSE_ERROR'
+    validation_error = 'VALIDATION_ERROR'
+    unknown_tool = 'UNKNOWN_TOOL'
+
+
+class BatchCompletionStreamResponseEventsItemEventToolErrorError(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    code: BatchCompletionStreamResponseEventsItemEventToolErrorErrorCode = Field(
+        ..., title='BatchCompletionStreamResponseEventsItemEventToolErrorErrorCode'
+    )
+    message: str
+    raw: str | None = None
+
+
+class BatchCompletionStreamResponseEventsItemEventToolError(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    type: Literal['toolError']
+    seq: conint(ge=0, le=9007199254740991)
+    error: BatchCompletionStreamResponseEventsItemEventToolErrorError = Field(
+        ..., title='BatchCompletionStreamResponseEventsItemEventToolErrorError'
+    )
+
+
+class BatchCompletionStreamResponseEventsItemEventCompletionStatsStatsBackendDevice(
+    Enum
+):
+    cpu = 'cpu'
+    gpu = 'gpu'
+
+
+class BatchCompletionStreamResponseEventsItemEventCompletionStatsStats(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    time_to_first_token: float | None = Field(None, alias='timeToFirstToken')
+    tokens_per_second: float | None = Field(None, alias='tokensPerSecond')
+    cache_tokens: float | None = Field(None, alias='cacheTokens')
+    prompt_tokens: float | None = Field(None, alias='promptTokens')
+    generated_tokens: float | None = Field(None, alias='generatedTokens')
+    avg_concurrent_seq: float | None = Field(None, alias='avgConcurrentSeq')
+    backend_device: (
+        BatchCompletionStreamResponseEventsItemEventCompletionStatsStatsBackendDevice
+        | None
+    ) = Field(
+        None,
+        alias='backendDevice',
+        title='BatchCompletionStreamResponseEventsItemEventCompletionStatsStatsBackendDevice',
+    )
+
+
+class BatchCompletionStreamResponseEventsItemEventCompletionStats(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    type: Literal['completionStats']
+    seq: conint(ge=0, le=9007199254740991)
+    stats: BatchCompletionStreamResponseEventsItemEventCompletionStatsStats = Field(
+        ..., title='BatchCompletionStreamResponseEventsItemEventCompletionStatsStats'
+    )
+
+
+class BatchCompletionStreamResponseEventsItemEventCompletionDoneErrorError(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    message: str
+
+
+class BatchCompletionStreamResponseEventsItemEventCompletionDoneErrorRaw(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    full_text: str = Field(..., alias='fullText')
+
+
+class BatchCompletionStreamResponseEventsItemEventCompletionDoneError(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    type: Literal['completionDone']
+    seq: conint(ge=0, le=9007199254740991)
+    stop_reason: Literal['error'] = Field(..., alias='stopReason')
+    error: BatchCompletionStreamResponseEventsItemEventCompletionDoneErrorError = Field(
+        ...,
+        title='BatchCompletionStreamResponseEventsItemEventCompletionDoneErrorError',
+    )
+    raw: BatchCompletionStreamResponseEventsItemEventCompletionDoneErrorRaw | None = (
+        Field(
+            None,
+            title='BatchCompletionStreamResponseEventsItemEventCompletionDoneErrorRaw',
+        )
+    )
+
+
+class BatchCompletionStreamResponseEventsItemEventCompletionDoneStopReason(Enum):
+    eos = 'eos'
+    length = 'length'
+    stop_sequence = 'stopSequence'
+    cancelled = 'cancelled'
+
+
+class BatchCompletionStreamResponseEventsItemEventCompletionDoneRaw(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    full_text: str = Field(..., alias='fullText')
+
+
+class BatchCompletionStreamResponseEventsItemEventCompletionDone(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    type: Literal['completionDone']
+    seq: conint(ge=0, le=9007199254740991)
+    stop_reason: (
+        BatchCompletionStreamResponseEventsItemEventCompletionDoneStopReason | None
+    ) = Field(
+        None,
+        alias='stopReason',
+        title='BatchCompletionStreamResponseEventsItemEventCompletionDoneStopReason',
+    )
+    raw: BatchCompletionStreamResponseEventsItemEventCompletionDoneRaw | None = Field(
+        None, title='BatchCompletionStreamResponseEventsItemEventCompletionDoneRaw'
+    )
+
+
+class BatchCompletionStreamResponseEventsItem(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    id: str
+    event: (
+        BatchCompletionStreamResponseEventsItemEventContentDelta
+        | BatchCompletionStreamResponseEventsItemEventRawDelta
+        | BatchCompletionStreamResponseEventsItemEventThinkingDelta
+        | BatchCompletionStreamResponseEventsItemEventToolCall
+        | BatchCompletionStreamResponseEventsItemEventToolError
+        | BatchCompletionStreamResponseEventsItemEventCompletionStats
+        | BatchCompletionStreamResponseEventsItemEventCompletionDoneError
+        | BatchCompletionStreamResponseEventsItemEventCompletionDone
+    )
+
+
+class BatchCompletionStreamResponseStatsBackendDevice(Enum):
+    cpu = 'cpu'
+    gpu = 'gpu'
+
+
+class BatchCompletionStreamResponseStats(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    time_to_first_token: float | None = Field(None, alias='timeToFirstToken')
+    tokens_per_second: float | None = Field(None, alias='tokensPerSecond')
+    cache_tokens: float | None = Field(None, alias='cacheTokens')
+    prompt_tokens: float | None = Field(None, alias='promptTokens')
+    generated_tokens: float | None = Field(None, alias='generatedTokens')
+    avg_concurrent_seq: float | None = Field(None, alias='avgConcurrentSeq')
+    backend_device: BatchCompletionStreamResponseStatsBackendDevice | None = Field(
+        None,
+        alias='backendDevice',
+        title='BatchCompletionStreamResponseStatsBackendDevice',
+    )
+
+
+class BatchCompletionStreamResponse(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    type: Literal['batchCompletionStream']
+    done: bool | None = None
+    ids: list[str] | None = None
+    events: list[BatchCompletionStreamResponseEventsItem]
+    stats: BatchCompletionStreamResponseStats | None = Field(
+        None, title='BatchCompletionStreamResponseStats'
+    )
+
+
 class BciTranscribeRequestNeuralDataBase64(BaseModel):
     type: Literal['base64'] = Field(
         ..., description='Inline base64-encoded neural bytes.'
@@ -224,6 +732,7 @@ class CancelRequestRequest(BaseModel):
 
 class CancelRequestBroadKind(Enum):
     completion = 'completion'
+    batch_completion = 'batchCompletion'
     embeddings = 'embeddings'
     transcribe = 'transcribe'
     translate = 'translate'
@@ -610,6 +1119,7 @@ class CompletionStreamResponseEventsItemCompletionStatsStats(BaseModel):
     cache_tokens: float | None = Field(None, alias='cacheTokens')
     prompt_tokens: float | None = Field(None, alias='promptTokens')
     generated_tokens: float | None = Field(None, alias='generatedTokens')
+    avg_concurrent_seq: float | None = Field(None, alias='avgConcurrentSeq')
     backend_device: (
         CompletionStreamResponseEventsItemCompletionStatsStatsBackendDevice | None
     ) = Field(
@@ -1701,6 +2211,7 @@ class LoadModelSrcRequestLlamacppCompletionModelConfig(BaseModel):
     repeat_penalty: float | None = None
     stop_sequences: list[str] | None = None
     n_discarded: float | None = None
+    parallel: conint(ge=1, le=9007199254740991) | None = None
     tools: bool | None = None
     tools_mode: LoadModelSrcRequestLlamacppCompletionModelConfigToolsMode | None = (
         Field(
@@ -1735,6 +2246,7 @@ class LoadModelSrcRequestLlamacppCompletionModelConfig(BaseModel):
     ) = Field(
         None, title='LoadModelSrcRequestLlamacppCompletionModelConfigImageTileMode'
     )
+    mmproj_use_gpu: bool | None = Field(None, alias='mmproj-use-gpu')
 
 
 class LoadModelSrcRequestLlamacppCompletion(BaseModel):
@@ -2958,6 +3470,7 @@ class LoadModelSrcRequestTtsGgmlModelConfigChatterboxLanguage(Enum):
     fr = 'fr'
     de = 'de'
     it = 'it'
+    ja = 'ja'
     pt = 'pt'
     nl = 'nl'
     pl = 'pl'
@@ -3065,6 +3578,182 @@ class LoadModelSrcRequestTtsGgmlModelConfigChatterboxReferenceAudioSrc(BaseModel
     ) = None
 
 
+class LoadModelSrcRequestTtsGgmlModelConfigChatterboxMecabDictSrcAddon(Enum):
+    llamacpp_completion = 'llamacpp-completion'
+    whispercpp_transcription = 'whispercpp-transcription'
+    bci_whispercpp_transcription = 'bci-whispercpp-transcription'
+    llamacpp_embedding = 'llamacpp-embedding'
+    nmtcpp_translation = 'nmtcpp-translation'
+    onnx_tts = 'onnx-tts'
+    tts_ggml = 'tts-ggml'
+    parakeet_transcription = 'parakeet-transcription'
+    ggml_ocr = 'ggml-ocr'
+    sdcpp_generation = 'sdcpp-generation'
+    ggml_vla = 'ggml-vla'
+    ggml_classification = 'ggml-classification'
+    llm = 'llm'
+    whisper = 'whisper'
+    bci = 'bci'
+    embeddings = 'embeddings'
+    nmt = 'nmt'
+    parakeet = 'parakeet'
+    tts = 'tts'
+    ocr = 'ocr'
+    diffusion = 'diffusion'
+    vla = 'vla'
+    classification = 'classification'
+
+
+class LoadModelSrcRequestTtsGgmlModelConfigChatterboxMecabDictSrc(BaseModel):
+    src: str
+    name: str | None = None
+    model_id: str | None = Field(None, alias='modelId')
+    registry_path: str | None = Field(None, alias='registryPath')
+    registry_source: str | None = Field(None, alias='registrySource')
+    blob_core_key: str | None = Field(None, alias='blobCoreKey')
+    blob_index: float | None = Field(None, alias='blobIndex')
+    engine: str | None = None
+    expected_size: float | None = Field(None, alias='expectedSize')
+    sha256_checksum: str | None = Field(None, alias='sha256Checksum')
+    addon: (
+        LoadModelSrcRequestTtsGgmlModelConfigChatterboxMecabDictSrcAddon
+        | Literal['vad']
+        | None
+    ) = None
+
+
+class LoadModelSrcRequestTtsGgmlModelConfigChatterboxCangjieTsvSrcAddon(Enum):
+    llamacpp_completion = 'llamacpp-completion'
+    whispercpp_transcription = 'whispercpp-transcription'
+    bci_whispercpp_transcription = 'bci-whispercpp-transcription'
+    llamacpp_embedding = 'llamacpp-embedding'
+    nmtcpp_translation = 'nmtcpp-translation'
+    onnx_tts = 'onnx-tts'
+    tts_ggml = 'tts-ggml'
+    parakeet_transcription = 'parakeet-transcription'
+    ggml_ocr = 'ggml-ocr'
+    sdcpp_generation = 'sdcpp-generation'
+    ggml_vla = 'ggml-vla'
+    ggml_classification = 'ggml-classification'
+    llm = 'llm'
+    whisper = 'whisper'
+    bci = 'bci'
+    embeddings = 'embeddings'
+    nmt = 'nmt'
+    parakeet = 'parakeet'
+    tts = 'tts'
+    ocr = 'ocr'
+    diffusion = 'diffusion'
+    vla = 'vla'
+    classification = 'classification'
+
+
+class LoadModelSrcRequestTtsGgmlModelConfigChatterboxCangjieTsvSrc(BaseModel):
+    src: str
+    name: str | None = None
+    model_id: str | None = Field(None, alias='modelId')
+    registry_path: str | None = Field(None, alias='registryPath')
+    registry_source: str | None = Field(None, alias='registrySource')
+    blob_core_key: str | None = Field(None, alias='blobCoreKey')
+    blob_index: float | None = Field(None, alias='blobIndex')
+    engine: str | None = None
+    expected_size: float | None = Field(None, alias='expectedSize')
+    sha256_checksum: str | None = Field(None, alias='sha256Checksum')
+    addon: (
+        LoadModelSrcRequestTtsGgmlModelConfigChatterboxCangjieTsvSrcAddon
+        | Literal['vad']
+        | None
+    ) = None
+
+
+class LoadModelSrcRequestTtsGgmlModelConfigChatterboxLavasrEnhancerModelSrcAddon(Enum):
+    llamacpp_completion = 'llamacpp-completion'
+    whispercpp_transcription = 'whispercpp-transcription'
+    bci_whispercpp_transcription = 'bci-whispercpp-transcription'
+    llamacpp_embedding = 'llamacpp-embedding'
+    nmtcpp_translation = 'nmtcpp-translation'
+    onnx_tts = 'onnx-tts'
+    tts_ggml = 'tts-ggml'
+    parakeet_transcription = 'parakeet-transcription'
+    ggml_ocr = 'ggml-ocr'
+    sdcpp_generation = 'sdcpp-generation'
+    ggml_vla = 'ggml-vla'
+    ggml_classification = 'ggml-classification'
+    llm = 'llm'
+    whisper = 'whisper'
+    bci = 'bci'
+    embeddings = 'embeddings'
+    nmt = 'nmt'
+    parakeet = 'parakeet'
+    tts = 'tts'
+    ocr = 'ocr'
+    diffusion = 'diffusion'
+    vla = 'vla'
+    classification = 'classification'
+
+
+class LoadModelSrcRequestTtsGgmlModelConfigChatterboxLavasrEnhancerModelSrc(BaseModel):
+    src: str
+    name: str | None = None
+    model_id: str | None = Field(None, alias='modelId')
+    registry_path: str | None = Field(None, alias='registryPath')
+    registry_source: str | None = Field(None, alias='registrySource')
+    blob_core_key: str | None = Field(None, alias='blobCoreKey')
+    blob_index: float | None = Field(None, alias='blobIndex')
+    engine: str | None = None
+    expected_size: float | None = Field(None, alias='expectedSize')
+    sha256_checksum: str | None = Field(None, alias='sha256Checksum')
+    addon: (
+        LoadModelSrcRequestTtsGgmlModelConfigChatterboxLavasrEnhancerModelSrcAddon
+        | Literal['vad']
+        | None
+    ) = None
+
+
+class LoadModelSrcRequestTtsGgmlModelConfigChatterboxLavasrDenoiserModelSrcAddon(Enum):
+    llamacpp_completion = 'llamacpp-completion'
+    whispercpp_transcription = 'whispercpp-transcription'
+    bci_whispercpp_transcription = 'bci-whispercpp-transcription'
+    llamacpp_embedding = 'llamacpp-embedding'
+    nmtcpp_translation = 'nmtcpp-translation'
+    onnx_tts = 'onnx-tts'
+    tts_ggml = 'tts-ggml'
+    parakeet_transcription = 'parakeet-transcription'
+    ggml_ocr = 'ggml-ocr'
+    sdcpp_generation = 'sdcpp-generation'
+    ggml_vla = 'ggml-vla'
+    ggml_classification = 'ggml-classification'
+    llm = 'llm'
+    whisper = 'whisper'
+    bci = 'bci'
+    embeddings = 'embeddings'
+    nmt = 'nmt'
+    parakeet = 'parakeet'
+    tts = 'tts'
+    ocr = 'ocr'
+    diffusion = 'diffusion'
+    vla = 'vla'
+    classification = 'classification'
+
+
+class LoadModelSrcRequestTtsGgmlModelConfigChatterboxLavasrDenoiserModelSrc(BaseModel):
+    src: str
+    name: str | None = None
+    model_id: str | None = Field(None, alias='modelId')
+    registry_path: str | None = Field(None, alias='registryPath')
+    registry_source: str | None = Field(None, alias='registrySource')
+    blob_core_key: str | None = Field(None, alias='blobCoreKey')
+    blob_index: float | None = Field(None, alias='blobIndex')
+    engine: str | None = None
+    expected_size: float | None = Field(None, alias='expectedSize')
+    sha256_checksum: str | None = Field(None, alias='sha256Checksum')
+    addon: (
+        LoadModelSrcRequestTtsGgmlModelConfigChatterboxLavasrDenoiserModelSrcAddon
+        | Literal['vad']
+        | None
+    ) = None
+
+
 class LoadModelSrcRequestTtsGgmlModelConfigChatterbox(BaseModel):
     model_config = ConfigDict(
         extra='forbid',
@@ -3093,6 +3782,22 @@ class LoadModelSrcRequestTtsGgmlModelConfigChatterbox(BaseModel):
     reference_audio_src: (
         str | LoadModelSrcRequestTtsGgmlModelConfigChatterboxReferenceAudioSrc | None
     ) = Field(None, alias='referenceAudioSrc')
+    mecab_dict_src: (
+        str | LoadModelSrcRequestTtsGgmlModelConfigChatterboxMecabDictSrc | None
+    ) = Field(None, alias='mecabDictSrc')
+    cangjie_tsv_src: (
+        str | LoadModelSrcRequestTtsGgmlModelConfigChatterboxCangjieTsvSrc | None
+    ) = Field(None, alias='cangjieTsvSrc')
+    lavasr_enhancer_model_src: (
+        str
+        | LoadModelSrcRequestTtsGgmlModelConfigChatterboxLavasrEnhancerModelSrc
+        | None
+    ) = Field(None, alias='lavasrEnhancerModelSrc')
+    lavasr_denoiser_model_src: (
+        str
+        | LoadModelSrcRequestTtsGgmlModelConfigChatterboxLavasrDenoiserModelSrc
+        | None
+    ) = Field(None, alias='lavasrDenoiserModelSrc')
     tts_supertonic_multilingual: Any | None = Field(
         None, alias='ttsSupertonicMultilingual'
     )
@@ -3148,6 +3853,94 @@ class LoadModelSrcRequestTtsGgmlModelConfigSupertonicLanguage(Enum):
     vi = 'vi'
 
 
+class LoadModelSrcRequestTtsGgmlModelConfigSupertonicLavasrEnhancerModelSrcAddon(Enum):
+    llamacpp_completion = 'llamacpp-completion'
+    whispercpp_transcription = 'whispercpp-transcription'
+    bci_whispercpp_transcription = 'bci-whispercpp-transcription'
+    llamacpp_embedding = 'llamacpp-embedding'
+    nmtcpp_translation = 'nmtcpp-translation'
+    onnx_tts = 'onnx-tts'
+    tts_ggml = 'tts-ggml'
+    parakeet_transcription = 'parakeet-transcription'
+    ggml_ocr = 'ggml-ocr'
+    sdcpp_generation = 'sdcpp-generation'
+    ggml_vla = 'ggml-vla'
+    ggml_classification = 'ggml-classification'
+    llm = 'llm'
+    whisper = 'whisper'
+    bci = 'bci'
+    embeddings = 'embeddings'
+    nmt = 'nmt'
+    parakeet = 'parakeet'
+    tts = 'tts'
+    ocr = 'ocr'
+    diffusion = 'diffusion'
+    vla = 'vla'
+    classification = 'classification'
+
+
+class LoadModelSrcRequestTtsGgmlModelConfigSupertonicLavasrEnhancerModelSrc(BaseModel):
+    src: str
+    name: str | None = None
+    model_id: str | None = Field(None, alias='modelId')
+    registry_path: str | None = Field(None, alias='registryPath')
+    registry_source: str | None = Field(None, alias='registrySource')
+    blob_core_key: str | None = Field(None, alias='blobCoreKey')
+    blob_index: float | None = Field(None, alias='blobIndex')
+    engine: str | None = None
+    expected_size: float | None = Field(None, alias='expectedSize')
+    sha256_checksum: str | None = Field(None, alias='sha256Checksum')
+    addon: (
+        LoadModelSrcRequestTtsGgmlModelConfigSupertonicLavasrEnhancerModelSrcAddon
+        | Literal['vad']
+        | None
+    ) = None
+
+
+class LoadModelSrcRequestTtsGgmlModelConfigSupertonicLavasrDenoiserModelSrcAddon(Enum):
+    llamacpp_completion = 'llamacpp-completion'
+    whispercpp_transcription = 'whispercpp-transcription'
+    bci_whispercpp_transcription = 'bci-whispercpp-transcription'
+    llamacpp_embedding = 'llamacpp-embedding'
+    nmtcpp_translation = 'nmtcpp-translation'
+    onnx_tts = 'onnx-tts'
+    tts_ggml = 'tts-ggml'
+    parakeet_transcription = 'parakeet-transcription'
+    ggml_ocr = 'ggml-ocr'
+    sdcpp_generation = 'sdcpp-generation'
+    ggml_vla = 'ggml-vla'
+    ggml_classification = 'ggml-classification'
+    llm = 'llm'
+    whisper = 'whisper'
+    bci = 'bci'
+    embeddings = 'embeddings'
+    nmt = 'nmt'
+    parakeet = 'parakeet'
+    tts = 'tts'
+    ocr = 'ocr'
+    diffusion = 'diffusion'
+    vla = 'vla'
+    classification = 'classification'
+
+
+class LoadModelSrcRequestTtsGgmlModelConfigSupertonicLavasrDenoiserModelSrc(BaseModel):
+    src: str
+    name: str | None = None
+    model_id: str | None = Field(None, alias='modelId')
+    registry_path: str | None = Field(None, alias='registryPath')
+    registry_source: str | None = Field(None, alias='registrySource')
+    blob_core_key: str | None = Field(None, alias='blobCoreKey')
+    blob_index: float | None = Field(None, alias='blobIndex')
+    engine: str | None = None
+    expected_size: float | None = Field(None, alias='expectedSize')
+    sha256_checksum: str | None = Field(None, alias='sha256Checksum')
+    addon: (
+        LoadModelSrcRequestTtsGgmlModelConfigSupertonicLavasrDenoiserModelSrcAddon
+        | Literal['vad']
+        | None
+    ) = None
+
+
 class LoadModelSrcRequestTtsGgmlModelConfigSupertonic(BaseModel):
     model_config = ConfigDict(
         extra='forbid',
@@ -3160,6 +3953,19 @@ class LoadModelSrcRequestTtsGgmlModelConfigSupertonic(BaseModel):
     tts_speed: float | None = Field(None, alias='ttsSpeed')
     tts_num_inference_steps: float | None = Field(None, alias='ttsNumInferenceSteps')
     use_gpu: bool | None = Field(None, alias='useGPU')
+    output_sample_rate: conint(ge=8000, le=192000) | None = Field(
+        None, alias='outputSampleRate'
+    )
+    lavasr_enhancer_model_src: (
+        str
+        | LoadModelSrcRequestTtsGgmlModelConfigSupertonicLavasrEnhancerModelSrc
+        | None
+    ) = Field(None, alias='lavasrEnhancerModelSrc')
+    lavasr_denoiser_model_src: (
+        str
+        | LoadModelSrcRequestTtsGgmlModelConfigSupertonicLavasrDenoiserModelSrc
+        | None
+    ) = Field(None, alias='lavasrDenoiserModelSrc')
     tts_supertonic_multilingual: Any | None = Field(
         None, alias='ttsSupertonicMultilingual'
     )
@@ -6166,7 +6972,8 @@ class Response_1(
 
 class Response(
     RootModel[
-        BciTranscribeResponse
+        BatchCompletionStreamResponse
+        | BciTranscribeResponse
         | BciTranscribeStreamResponse
         | CancelResponse
         | ClassifyResponse
@@ -6208,7 +7015,8 @@ class Response(
     ]
 ):
     root: (
-        BciTranscribeResponse
+        BatchCompletionStreamResponse
+        | BciTranscribeResponse
         | BciTranscribeStreamResponse
         | CancelResponse
         | ClassifyResponse
@@ -6262,7 +7070,8 @@ class Request_6(RootModel[TranslateNmtRequest | TranslateLlmRequest]):
 
 class Request(
     RootModel[
-        BciTranscribeRequest
+        BatchCompletionStreamRequest
+        | BciTranscribeRequest
         | BciTranscribeStreamRequest
         | Request_1
         | ClassifyRequest
@@ -6300,7 +7109,8 @@ class Request(
     ]
 ):
     root: (
-        BciTranscribeRequest
+        BatchCompletionStreamRequest
+        | BciTranscribeRequest
         | BciTranscribeStreamRequest
         | Request_1
         | ClassifyRequest

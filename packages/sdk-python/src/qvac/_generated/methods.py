@@ -14,6 +14,8 @@ from typing import Iterable, Iterator
 
 from .._transport import Transport
 from . import (
+    BatchCompletionStreamRequest,
+    BatchCompletionStreamResponse,
     BciTranscribeRequest,
     BciTranscribeResponse,
     BciTranscribeStreamRequest,
@@ -88,6 +90,14 @@ from . import (
     VideoStreamRequest,
     VideoStreamResponse,
 )
+
+
+def batch_completion_stream(
+    transport: Transport, params: BatchCompletionStreamRequest
+) -> Iterator[BatchCompletionStreamResponse]:
+    payload = params.model_dump(mode="json", by_alias=True, exclude_unset=True)
+    for chunk in transport.call_stream(payload):
+        yield BatchCompletionStreamResponse.model_validate(chunk)
 
 
 def bci_transcribe(
