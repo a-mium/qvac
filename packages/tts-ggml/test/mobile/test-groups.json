@@ -23,6 +23,7 @@
       "runChatterboxSpeedTest",
       "runGpuSmokeTest",
       "runLavasrEnhancerTest",
+      "runDenoiserBenchTest",
       "runMultipleRunsTest",
       "runOutputSampleRateTest",
       "runSupertonicMtlTest",
