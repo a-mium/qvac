@@ -2,6 +2,7 @@
   "default-registry": {
     "kind": "git",
     "baseline": "003957d5028ad68d09f53df57ad3bf68d4c58908",
+    "reference": "bench/parakeet-eou-gpu-decode",
     "repository": "https://github.com/tetherto/qvac-registry-vcpkg.git"
   },
   "registries": [
