@@ -46,13 +46,25 @@ function validateRunInput (input, hparams) {
       })
     }
   }
+  // Pixel-plane models (smolvla, pi05) take `3 · w · h` floats per camera.
+  // GR00T takes images already patchified by Gr00tPolicy — a variable-length
+  // `patches · patch_flat` buffer whose exact shape depends on patch/merge
+  // hparams the JS layer doesn't carry; the native infer() validates it
+  // precisely (and returns a clean failure on mismatch), so here we only
+  // assert the buffer is a non-empty Float32Array. `imageInputMode` is the
+  // distinguishing axis (both groot and smolvla are `continuous` state).
+  const imagesArePatches = hparams && hparams.imageInputMode === 'patches'
   const expectedPerImage = 3 * imgWidth * imgHeight
   for (let i = 0; i < input.images.length; i++) {
     const img = input.images[i]
     if (!(img instanceof Float32Array)) {
       throw new QvacErrorAddonVla({ code: ERR_CODES.INVALID_INPUT, adds: `input.images[${i}] must be a Float32Array` })
     }
-    if (img.length !== expectedPerImage) {
+    if (imagesArePatches) {
+      if (img.length === 0) {
+        throw new QvacErrorAddonVla({ code: ERR_CODES.INVALID_INPUT, adds: `input.images[${i}] (patches) must be a non-empty Float32Array` })
+      }
+    } else if (img.length !== expectedPerImage) {
       throw new QvacErrorAddonVla({ code: ERR_CODES.INVALID_INPUT, adds: `input.images[${i}] length ${img.length} != 3*${imgWidth}*${imgHeight}` })
     }
   }

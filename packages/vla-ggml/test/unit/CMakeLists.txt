@@ -15,6 +15,7 @@ add_executable(
   test_groot_m4_5_backbone.cpp
   test_groot_m4_6_pipeline.cpp
   test_groot_m4_7_positions.cpp
+  test_groot_surface.cpp
   test_pi05_m3_1_siglip.cpp
   test_pi05_m3_2_siglip_block.cpp
   test_pi05_m3_3_siglip_tower.cpp

@@ -113,11 +113,9 @@ static struct ggml_tensor* grootLinearXW(
   return out;
 }
 
-// Compute a fully-built forward graph on the CPU backend. v1 GR00T is CPU-only
-// (weights are mmapped into ctx_w with real data pointers; see the class
-// comment), so this runs the graph directly on `backendCpu` — the same path
-// the parity tests use via pi05_test::computeGraphCpu, but through the model's
-// own backend handle instead of a throwaway one.
+// Run a forward graph on the CPU backend. v1 GR00T is CPU-only (weights mmapped
+// into ctx_w with real data pointers; see the class comment), so compute goes
+// directly through `backendCpu` — the same path the parity tests exercise.
 static bool grootComputeCpu(ggml_backend_t backendCpu, struct ggml_cgraph* gf) {
   return ggml_backend_graph_compute(backendCpu, gf) == GGML_STATUS_SUCCESS;
 }
@@ -278,15 +276,12 @@ static std::unique_ptr<GrootModelInternal> grootLoadModel(
     }
   }
 
-  // v1: CPU-only mmap path regardless of GPU selection above — GPU
-  // alloc+copy deferred until parity is proven (see class comment).
-  // Force CPU backend for actual compute even if a GPU device was found,
-  // by not wiring m->backend into the compute path yet. `infer()` uses
-  // m->backend_cpu directly for v1.
+  // v1: CPU compute regardless of the GPU selection above — infer() uses
+  // m->backend_cpu directly, m->backend is never wired into the compute path.
+  // GPU alloc+copy deferred until parity is proven (see class comment).
   //
-  // NOTE: this means hasGpu()/backendName() may report a GPU that isn't
-  // actually used for compute yet — acceptable for v1 (matches "CPU-only
-  // mmap path for v1" scope), revisit alongside the GPU alloc+copy path.
+  // NOTE: hasGpu()/backendName() may thus report a GPU that isn't actually used
+  // for compute yet — acceptable for v1, revisit with the GPU alloc+copy path.
 
   struct gguf_init_params gp{};
   gp.no_alloc = false;
@@ -546,7 +541,6 @@ static struct ggml_tensor* grootBuildVlfusionBlock(
     struct ggml_context* ctx, struct ggml_tensor* x,
     const GrootVlfusionBlockWeights& w, int nTokens, int dim, int nHeads,
     int headDim, float eps) {
-  // ── Pre-attention LayerNorm + MHSA + residual ─────────────────────────
   struct ggml_tensor* residual = x;
   struct ggml_tensor* h = grootLayerNorm(ctx, x, w.norm1_w, w.norm1_b, eps);
 
@@ -577,7 +571,6 @@ static struct ggml_tensor* grootBuildVlfusionBlock(
   struct ggml_tensor* proj = grootLinear(ctx, attnOut, w.attn_out_w, w.attn_out_b);
   h = ggml_add(ctx, proj, residual);
 
-  // ── Post-attention LayerNorm + GELU-approx FFN + residual ─────────────
   residual = h;
   h = grootLayerNorm(ctx, h, w.norm3_w, w.norm3_b, eps);
   h = grootLinear(ctx, h, w.ffn_in_w, w.ffn_in_b);
@@ -686,7 +679,6 @@ struct ggml_tensor* grootBuildActionEncoderGraph(
   // the feature axis: torch.cat([a_emb, tau_emb], dim=-1) → ggml dim0.
   struct ggml_tensor* tau2 = ggml_repeat(ctx, tauEnc, a);
   struct ggml_tensor* x = ggml_concat(ctx, a, tau2, /*dim=*/0);
-  // swish(W2(x)) then W3.
   x = grootLinearXW(ctx, x, w2.weight, w2.bias);
   x = ggml_silu(ctx, x); // swish(x) = x·sigmoid(x) = SiLU
   x = grootLinearXW(ctx, x, w3.weight, w3.bias);
@@ -1203,6 +1195,9 @@ GrootModel::GrootModel(
   hparams_.vision_image_size = 256;  // image_target_size from the source config
   hparams_.num_cameras = 2;          // OXE_DROID: exterior_image_1_left + wrist_image_left
   hparams_.state_input_mode = VlaHparamsGeneric::StateInputMode::Continuous;
+  // Images arrive pre-patchified from Gr00tPolicy (see infer()'s contract),
+  // not as raw pixels — the JS validator branches on this.
+  hparams_.image_input_mode = VlaHparamsGeneric::ImageInputMode::Patches;
 }
 
 GrootModel::~GrootModel() = default;

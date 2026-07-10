@@ -256,6 +256,11 @@ inline js_value_t* getVlaHparams(js_env_t* env, js_callback_info_t* info) try {
       hp.state_input_mode == VlaHparamsGeneric::StateInputMode::Discrete
           ? "discrete"
           : "continuous");
+  setStr(
+      "imageInputMode",
+      hp.image_input_mode == VlaHparamsGeneric::ImageInputMode::Patches
+          ? "patches"
+          : "pixels");
   return obj;
 }
 JSCATCH

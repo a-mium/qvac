@@ -37,6 +37,14 @@ struct VlaHparamsGeneric {
   // is ignored on the discrete path.
   enum class StateInputMode { Continuous, Discrete };
   StateInputMode state_input_mode = StateInputMode::Continuous;
+  // How the consumer passes camera images. SmolVLA and π₀.₅ take raw pixel
+  // planes (`3 · vision_image_size²` floats per camera); GR00T takes images
+  // already resized/normalized/patchified by Gr00tPolicy (a
+  // `patches · patch_flat` buffer per camera). Both are `Continuous` state
+  // models, so `state_input_mode` can't distinguish the image contract — this
+  // is the axis the JS validator branches on to accept groot's patch buffers.
+  enum class ImageInputMode { Pixels, Patches };
+  ImageInputMode image_input_mode = ImageInputMode::Pixels;
 };
 
 // Architecture-neutral wall-clock timings (milliseconds). The SmolVLA-named
