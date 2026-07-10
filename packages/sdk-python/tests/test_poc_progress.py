@@ -22,16 +22,11 @@ skipped when either is missing.
 from __future__ import annotations
 
 import os
-import sys
 from pathlib import Path
 
 import pytest
 
-TESTS_DIR = Path(__file__).resolve().parent
-sys.path.insert(0, str(TESTS_DIR))
-sys.path.insert(0, str(TESTS_DIR.parent / "src"))
-
-from qvac.models import QWEN3_600M_INST_Q4  # noqa: E402
+from qvac.models import QWEN3_600M_INST_Q4
 
 DEFAULT_MODEL = str(
     Path.home() / ".qvac" / "models" / "5b8aae816570a09d_Qwen3-0.6B-Q4_0.gguf"
@@ -73,12 +68,12 @@ def transport(worker):
 async def test_load_model_with_progress_streams_real_progress_then_terminal_reply(
     transport,
 ) -> None:
-    from qvac._generated import (
+    from qvac.schemas import (
         LoadModelRequest,
         LoadModelResponse,
         ModelProgressResponse,
     )
-    from qvac._generated.methods import load_model_with_progress
+    from qvac.methods import load_model_with_progress
 
     params = LoadModelRequest.model_validate(
         {

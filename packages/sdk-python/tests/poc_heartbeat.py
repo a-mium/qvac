@@ -5,7 +5,7 @@ QVAC RPC proof-of-concept — bare worker spawn + bare-rpc wire encoding/decodin
 `QvacWorker` is deliberately just that: process lifecycle, framing, and the
 three wire call shapes (unary/stream/duplex). Everything method-specific —
 building a typed request, picking the right call shape, parsing the typed
-response — lives in the real package (`qvac._generated.methods`, `qvac.api`,
+response — lives in the real package (`qvac.methods`, `qvac.schemas`, `qvac.api`,
 `qvac.models`) and is exercised below via `poc_transport.PocTransport`, the
 same adapter the test suite uses. This file is the only thing standing in
 for the not-yet-built production transport (bare-rpc-python); once that
@@ -399,13 +399,13 @@ async def _as_async_iter(items):
 
 # ============================================================================
 # 3. Demo — everything method-specific goes through the real typed layer
-#    (qvac._generated.methods / qvac.models), via PocTransport(w). QvacWorker
+#    (qvac.methods / qvac.models), via PocTransport(w). QvacWorker
 #    itself is never touched below except to construct the transport.
 # ============================================================================
 
 from poc_transport import PocTransport
 from qvac.models import QWEN3_600M_INST_Q4
-from qvac._generated import (
+from qvac.schemas import (
     CompletionStreamRequest,
     EmbedRequest,
     HeartbeatRequest,
@@ -414,7 +414,7 @@ from qvac._generated import (
     TranscribeRequest,
     TranscribeStreamRequest,
 )
-from qvac._generated.methods import (
+from qvac.methods import (
     completion_stream,
     embed,
     heartbeat,

@@ -5,13 +5,7 @@ end-to-end coverage)."""
 
 from __future__ import annotations
 
-import sys
-from pathlib import Path
-
 import pytest
-
-TESTS_DIR = Path(__file__).resolve().parent
-sys.path.insert(0, str(TESTS_DIR.parent / "src"))
 
 from qvac import api
 

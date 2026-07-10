@@ -12,7 +12,7 @@ everything else below is a direct translation.
 
 Talks to a real worker via poc_heartbeat.QvacWorker + poc_transport.PocTransport
 (the production transport, bare-rpc-python, isn't built yet); everything above
-that -- qvac.models, qvac._generated.methods, qvac.api -- is the real package.
+that -- qvac.models, qvac.schemas, qvac.methods, qvac.api -- is the real package.
 
 RUN:
   python3 python_quickstart.py
@@ -33,12 +33,12 @@ if str(Path(__file__).resolve().parent) not in sys.path:
 from poc_heartbeat import QvacWorker
 from poc_transport import PocTransport
 from qvac.models import LLAMA_3_2_1B_INST_Q4_0
-from qvac._generated import (
+from qvac.schemas import (
     CompletionStreamRequest,
     LoadModelRequest,
     ModelProgressResponse,
 )
-from qvac._generated.methods import completion_stream, load_model_with_progress
+from qvac.methods import completion_stream, load_model_with_progress
 from qvac.api import unload_model
 
 

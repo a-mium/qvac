@@ -14,14 +14,8 @@ environment doesn't have.
 from __future__ import annotations
 
 import os
-import sys
-from pathlib import Path
 
 import pytest
-
-TESTS_DIR = Path(__file__).resolve().parent
-sys.path.insert(0, str(TESTS_DIR))
-sys.path.insert(0, str(TESTS_DIR.parent / "src"))
 
 pytestmark = pytest.mark.skipif(
     "QVAC_POC_SDK_DIR" not in os.environ,
@@ -45,8 +39,8 @@ def transport(worker):
 
 
 async def test_heartbeat_reply_round_trips_through_generated_stub(transport) -> None:
-    from qvac._generated import HeartbeatRequest
-    from qvac._generated.methods import heartbeat
+    from qvac.schemas import HeartbeatRequest
+    from qvac.methods import heartbeat
 
     response = await heartbeat(transport, HeartbeatRequest(type="heartbeat"))
     assert response.type == "heartbeat"
@@ -54,8 +48,8 @@ async def test_heartbeat_reply_round_trips_through_generated_stub(transport) -> 
 
 
 async def test_state_reply_round_trips_through_generated_stub(transport) -> None:
-    from qvac._generated import StateRequest
-    from qvac._generated.methods import state
+    from qvac.schemas import StateRequest
+    from qvac.methods import state
 
     response = await state(transport, StateRequest(type="state"))
     assert response.type == "state"

@@ -1,7 +1,8 @@
 """Adapts the hand-written PoC's `QvacWorker` (poc_heartbeat.py) to the
 `qvac._transport.Transport` protocol, so the generated stubs in
-`qvac._generated.methods` can be smoke-tested against a real running worker
-ahead of the production `bare-rpc-python` transport (not yet built).
+`qvac.methods` (and the request/response types in `qvac.schemas`) can be
+smoke-tested against a real running worker ahead of the production
+`bare-rpc-python` transport (not yet built).
 """
 
 from __future__ import annotations

@@ -2,7 +2,7 @@
 layer: each function reshapes caller-friendly parameters into the wire
 request, validates the response, and raises on failure — the same job the
 JS convenience functions do on top of the raw generated stubs
-(`qvac._generated.methods`).
+(`qvac.methods`).
 
 Asyncio-native, matching the JS SDK and qvac._transport.Transport.
 
@@ -19,7 +19,7 @@ from __future__ import annotations
 
 from typing import Any, AsyncIterator
 
-from ._generated import (
+from .schemas import (
     CancelRequest,
     CancelResponse,
     DeleteCacheRequest,
