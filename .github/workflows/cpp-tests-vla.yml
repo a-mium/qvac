@@ -37,6 +37,7 @@ jobs:
       contents: read
       packages: read
       pull-requests: write
+      id-token: write # OIDC to pull the GR00T parity model from S3
     strategy:
       fail-fast: false
       matrix:
@@ -197,10 +198,38 @@ jobs:
         shell: bash
         run: npm run test:cpp:build
 
+      # GR00T end-to-end PyTorch-parity gate. The C++ GrootInferParity test is
+      # env-gated (GROOT_TEST_*), so it only runs when the artefacts below are
+      # present — this wires them in so parity runs in CI, not just locally.
+      # Skipped on the intel-mac (Apple-Paravirtual GPU / model size), same as
+      # the desktop integration workflow; groot's other env-gated milestone
+      # tests stay skipped (their v1/v2/v3 oracles aren't published).
+      - name: Configure AWS credentials via OIDC (GR00T parity)
+        if: ${{ !(matrix.platform == 'darwin' && matrix.arch == 'x64') }}
+        uses: aws-actions/configure-aws-credentials@8df5847569e6427dd6c4fb1cf565c83acfa8afa7 # 6.0.0
+        with:
+          role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
+          aws-region: eu-central-1
+
+      - name: Download GR00T parity artefacts from S3
+        if: ${{ !(matrix.platform == 'darwin' && matrix.arch == 'x64') }}
+        working-directory: ${{ env.WORKDIR }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p model/vla/groot test/groot-oracle
+          S3_BASE="s3://${{ secrets.MODEL_S3_BUCKET }}/qvac_models_compiled/vla/groot-n1.7-3b/2026-07-10"
+          aws s3 cp "$S3_BASE/groot-q8_vf16.gguf"          model/vla/groot/groot-q8_vf16.gguf
+          aws s3 cp "$S3_BASE/activations_v4.safetensors"  test/groot-oracle/activations_v4.safetensors
+          ls -la model/vla/groot/ test/groot-oracle/
+
       - name: Run C++ tests
         id: cpp-tests
         working-directory: ${{ env.WORKDIR }}
         shell: bash
+        env:
+          GROOT_TEST_GGUF: ${{ !(matrix.platform == 'darwin' && matrix.arch == 'x64') && format('{0}/{1}/model/vla/groot/groot-q8_vf16.gguf', github.workspace, env.WORKDIR) || '' }}
+          GROOT_TEST_ACTIVATIONS_V4: ${{ !(matrix.platform == 'darwin' && matrix.arch == 'x64') && format('{0}/{1}/test/groot-oracle/activations_v4.safetensors', github.workspace, env.WORKDIR) || '' }}
         run: |
           set -euo pipefail
 
