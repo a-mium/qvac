@@ -6,7 +6,7 @@ ahead of the production `bare-rpc-python` transport (not yet built).
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Iterable, Iterator
+from typing import TYPE_CHECKING, Any, AsyncIterable, AsyncIterator
 
 if TYPE_CHECKING:
     # Import-time only (see `from __future__ import annotations` above) --
@@ -19,13 +19,17 @@ class PocTransport:
     def __init__(self, worker: "QvacWorker") -> None:
         self._worker = worker
 
-    def call(self, payload: dict[str, Any]) -> dict[str, Any]:
-        return self._worker.call(payload)
+    async def call(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return await self._worker.call(payload)
 
-    def call_stream(self, payload: dict[str, Any]) -> Iterator[dict[str, Any]]:
-        yield from self._worker.call_stream(payload)
+    async def call_stream(
+        self, payload: dict[str, Any]
+    ) -> AsyncIterator[dict[str, Any]]:
+        async for chunk in self._worker.call_stream(payload):
+            yield chunk
 
-    def call_duplex(
-        self, payload: dict[str, Any], up: Iterable[bytes]
-    ) -> Iterator[dict[str, Any]]:
-        yield from self._worker._duplex_call(payload, up)
+    async def call_duplex(
+        self, payload: dict[str, Any], up: AsyncIterable[bytes]
+    ) -> AsyncIterator[dict[str, Any]]:
+        async for chunk in self._worker._duplex_call(payload, up):
+            yield chunk

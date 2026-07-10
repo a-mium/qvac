@@ -21,21 +21,22 @@ class FakeTransport:
         self.response = response
         self.sent = None
 
-    def call(self, payload):
+    async def call(self, payload):
         self.sent = payload
         return self.response
 
-    def call_stream(self, payload):
+    async def call_stream(self, payload):
         self.sent = payload
-        yield from self.response
+        for item in self.response:
+            yield item
 
-    def call_duplex(self, payload, up):
+    async def call_duplex(self, payload, up):
         raise NotImplementedError
 
 
-def test_cancel_by_request_id():
+async def test_cancel_by_request_id():
     transport = FakeTransport({"type": "cancel", "success": True})
-    api.cancel(transport, request_id="req-1")
+    await api.cancel(transport, request_id="req-1")
     assert transport.sent == {
         "type": "cancel",
         "operation": "request",
@@ -43,9 +44,9 @@ def test_cancel_by_request_id():
     }
 
 
-def test_cancel_by_request_id_with_clear_cache():
+async def test_cancel_by_request_id_with_clear_cache():
     transport = FakeTransport({"type": "cancel", "success": True})
-    api.cancel(transport, request_id="req-1", clear_cache=True)
+    await api.cancel(transport, request_id="req-1", clear_cache=True)
     assert transport.sent == {
         "type": "cancel",
         "operation": "request",
@@ -54,9 +55,9 @@ def test_cancel_by_request_id_with_clear_cache():
     }
 
 
-def test_cancel_broad_by_model_id():
+async def test_cancel_broad_by_model_id():
     transport = FakeTransport({"type": "cancel", "success": True})
-    api.cancel(transport, model_id="model-1", kind="completion")
+    await api.cancel(transport, model_id="model-1", kind="completion")
     assert transport.sent == {
         "type": "cancel",
         "operation": "broad",
@@ -65,21 +66,21 @@ def test_cancel_broad_by_model_id():
     }
 
 
-def test_cancel_requires_request_id_or_model_id():
+async def test_cancel_requires_request_id_or_model_id():
     transport = FakeTransport({"type": "cancel", "success": True})
     with pytest.raises(ValueError):
-        api.cancel(transport)
+        await api.cancel(transport)
 
 
-def test_cancel_raises_on_failure():
+async def test_cancel_raises_on_failure():
     transport = FakeTransport({"type": "cancel", "success": False, "error": "nope"})
     with pytest.raises(api.CancelFailedError):
-        api.cancel(transport, request_id="req-1")
+        await api.cancel(transport, request_id="req-1")
 
 
-def test_unload_model_success():
+async def test_unload_model_success():
     transport = FakeTransport({"type": "unloadModel", "success": True})
-    api.unload_model(transport, "model-1")
+    await api.unload_model(transport, "model-1")
     assert transport.sent == {
         "type": "unloadModel",
         "modelId": "model-1",
@@ -87,15 +88,15 @@ def test_unload_model_success():
     }
 
 
-def test_unload_model_raises_on_failure():
+async def test_unload_model_raises_on_failure():
     transport = FakeTransport({"type": "unloadModel", "success": False})
     with pytest.raises(api.ModelUnloadFailedError):
-        api.unload_model(transport, "model-1")
+        await api.unload_model(transport, "model-1")
 
 
-def test_invoke_plugin_unwraps_result():
+async def test_invoke_plugin_unwraps_result():
     transport = FakeTransport({"type": "pluginInvoke", "result": {"ok": True}})
-    result = api.invoke_plugin(transport, "model-1", "vlaRun", params={"x": 1})
+    result = await api.invoke_plugin(transport, "model-1", "vlaRun", params={"x": 1})
     assert result == {"ok": True}
     assert transport.sent == {
         "type": "pluginInvoke",
@@ -105,7 +106,7 @@ def test_invoke_plugin_unwraps_result():
     }
 
 
-def test_invoke_plugin_stream_skips_done_chunk():
+async def test_invoke_plugin_stream_skips_done_chunk():
     transport = FakeTransport(
         [
             {"type": "pluginInvokeStream", "result": "a"},
@@ -113,7 +114,9 @@ def test_invoke_plugin_stream_skips_done_chunk():
             {"type": "pluginInvokeStream", "result": None, "done": True},
         ]
     )
-    results = list(api.invoke_plugin_stream(transport, "model-1", "handler"))
+    results = [
+        r async for r in api.invoke_plugin_stream(transport, "model-1", "handler")
+    ]
     assert results == ["a", "b"]
 
 
@@ -135,44 +138,44 @@ REGISTRY_MODEL_ITEM = {
 }
 
 
-def test_model_registry_list_returns_models():
+async def test_model_registry_list_returns_models():
     transport = FakeTransport(
         {"type": "modelRegistryList", "success": True, "models": [REGISTRY_MODEL_ITEM]}
     )
-    models = api.model_registry_list(transport)
+    models = await api.model_registry_list(transport)
     assert len(models) == 1
     assert models[0].registry_path == "p"
 
 
-def test_model_registry_list_raises_on_failure():
+async def test_model_registry_list_raises_on_failure():
     transport = FakeTransport(
         {"type": "modelRegistryList", "success": False, "error": "boom"}
     )
     with pytest.raises(api.ModelRegistryQueryFailedError, match="boom"):
-        api.model_registry_list(transport)
+        await api.model_registry_list(transport)
 
 
-def test_model_registry_search_model_type_aliases_addon():
+async def test_model_registry_search_model_type_aliases_addon():
     transport = FakeTransport(
         {"type": "modelRegistrySearch", "success": True, "models": []}
     )
-    api.model_registry_search(transport, model_type="llm")
+    await api.model_registry_search(transport, model_type="llm")
     assert transport.sent == {"type": "modelRegistrySearch", "addon": "llm"}
 
 
-def test_model_registry_search_model_type_wins_over_addon():
+async def test_model_registry_search_model_type_wins_over_addon():
     transport = FakeTransport(
         {"type": "modelRegistrySearch", "success": True, "models": []}
     )
-    api.model_registry_search(transport, model_type="llm", addon="whisper")
+    await api.model_registry_search(transport, model_type="llm", addon="whisper")
     assert transport.sent["addon"] == "llm"
 
 
-def test_model_registry_search_passes_filters():
+async def test_model_registry_search_passes_filters():
     transport = FakeTransport(
         {"type": "modelRegistrySearch", "success": True, "models": []}
     )
-    api.model_registry_search(
+    await api.model_registry_search(
         transport, filter="qwen", engine="llamacpp-completion", quantization="q4"
     )
     assert transport.sent == {
@@ -183,26 +186,26 @@ def test_model_registry_search_passes_filters():
     }
 
 
-def test_model_registry_get_model_uses_fallback_error():
+async def test_model_registry_get_model_uses_fallback_error():
     transport = FakeTransport(
         {"type": "modelRegistryGetModel", "success": False, "error": None}
     )
     with pytest.raises(
         api.ModelRegistryQueryFailedError, match="Model not found: hf/p"
     ):
-        api.model_registry_get_model(transport, "p", "hf")
+        await api.model_registry_get_model(transport, "p", "hf")
 
 
-def test_delete_cache_all():
+async def test_delete_cache_all():
     transport = FakeTransport({"type": "deleteCache", "success": True})
-    result = api.delete_cache(transport, all=True)
+    result = await api.delete_cache(transport, all=True)
     assert transport.sent == {"type": "deleteCache", "all": True}
     assert result == {"success": True}
 
 
-def test_delete_cache_by_kv_cache_key():
+async def test_delete_cache_by_kv_cache_key():
     transport = FakeTransport({"type": "deleteCache", "success": True})
-    api.delete_cache(transport, kv_cache_key="key-1", model_id="model-1")
+    await api.delete_cache(transport, kv_cache_key="key-1", model_id="model-1")
     assert transport.sent == {
         "type": "deleteCache",
         "kvCacheKey": "key-1",
@@ -210,21 +213,21 @@ def test_delete_cache_by_kv_cache_key():
     }
 
 
-def test_delete_cache_requires_all_or_kv_cache_key():
+async def test_delete_cache_requires_all_or_kv_cache_key():
     transport = FakeTransport({"type": "deleteCache", "success": True})
     with pytest.raises(api.InvalidDeleteCacheParamsError):
-        api.delete_cache(transport)
+        await api.delete_cache(transport)
 
 
-def test_delete_cache_raises_only_when_error_message_present():
+async def test_delete_cache_raises_only_when_error_message_present():
     transport = FakeTransport(
         {"type": "deleteCache", "success": False, "error": "boom"}
     )
     with pytest.raises(api.DeleteCacheFailedError):
-        api.delete_cache(transport, all=True)
+        await api.delete_cache(transport, all=True)
 
 
-def test_delete_cache_silent_failure_without_error_message():
+async def test_delete_cache_silent_failure_without_error_message():
     transport = FakeTransport({"type": "deleteCache", "success": False})
-    result = api.delete_cache(transport, all=True)
+    result = await api.delete_cache(transport, all=True)
     assert result == {"success": False}

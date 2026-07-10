@@ -12,6 +12,9 @@ for the not-yet-built production transport (bare-rpc-python); once that
 lands, `QvacWorker` is what it replaces — nothing above it should need to
 change.
 
+Asyncio-native throughout, matching the JS SDK (Promises / async iterators)
+rather than blocking sockets + sync generators.
+
 RUN:
   python3 poc_heartbeat.py                                             # heartbeat + a default completion
   QVAC_POC_MODEL="/path/to/model.gguf" python3 poc_heartbeat.py        # completion against a specific local model
@@ -25,9 +28,9 @@ Wire format (bare-rpc: lib/messages.js, lib/constants.js):
   in-band as a normal reply {"type":"error","message":...}.
 """
 
+import asyncio
 import json
 import os
-import socket
 import subprocess
 import sys
 import tempfile
@@ -119,11 +122,11 @@ class QvacWorker:
         self._sock_path = os.path.join(
             tempfile.gettempdir(), f"qvac-poc-{os.getpid()}.sock"
         )
-        self._server = None
-        self._conn = None
-        self._proc = None
+        self._server: asyncio.AbstractServer | None = None
+        self._reader: asyncio.StreamReader | None = None
+        self._writer: asyncio.StreamWriter | None = None
+        self._proc: asyncio.subprocess.Process | None = None
         self._id = 0
-        self._rx = b""  # bytes read past a frame boundary
         self._log_path = os.path.join(
             tempfile.gettempdir(), f"qvac-poc-worker-{os.getpid()}.log"
         )
@@ -131,13 +134,18 @@ class QvacWorker:
 
     # ---- lifecycle -------------------------------------------------------
 
-    def start(self):
+    async def start(self):
         if os.path.exists(self._sock_path):
             os.unlink(self._sock_path)
-        self._server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        self._server.bind(self._sock_path)
-        self._server.listen(1)
-        self._server.settimeout(30)
+
+        connected: asyncio.Future[None] = asyncio.get_running_loop().create_future()
+
+        async def on_client(reader, writer):
+            self._reader, self._writer = reader, writer
+            if not connected.done():
+                connected.set_result(None)
+
+        self._server = await asyncio.start_unix_server(on_client, path=self._sock_path)
 
         # The worker reads its socket path (+ home dir) from a JSON arg,
         # parsed as Bare.argv[2] (server/env.ts).
@@ -149,37 +157,42 @@ class QvacWorker:
         )
         # worker stdout+stderr -> a file, so reading its logs never blocks on a live pipe
         self._log_fh = open(self._log_path, "wb")
-        self._proc = subprocess.Popen(
-            [BARE, WORKER, config],
+        self._proc = await asyncio.create_subprocess_exec(
+            BARE,
+            WORKER,
+            config,
             cwd=SDK,
             stdout=self._log_fh,
             stderr=subprocess.STDOUT,
         )
-        self._conn, _ = self._server.accept()  # worker dials back in
-        self._conn.settimeout(180)  # model load + generation can take a while
+        await asyncio.wait_for(connected, timeout=30)  # worker dials back in
         return self
 
-    def close(self):
+    async def close(self):
         if self._proc:
             self._proc.terminate()
             try:
-                self._proc.wait(timeout=5)
-            except subprocess.TimeoutExpired:
+                await asyncio.wait_for(self._proc.wait(), timeout=5)
+            except asyncio.TimeoutError:
                 self._proc.kill()
-        if self._conn:
-            self._conn.close()
+        if self._writer:
+            self._writer.close()
         if self._server:
             self._server.close()
+            try:
+                await asyncio.wait_for(self._server.wait_closed(), timeout=5)
+            except asyncio.TimeoutError:
+                pass
         if self._log_fh:
             self._log_fh.close()
         if os.path.exists(self._sock_path):
             os.unlink(self._sock_path)
 
-    def __enter__(self):
-        return self.start()
+    async def __aenter__(self):
+        return await self.start()
 
-    def __exit__(self, *exc):
-        self.close()
+    async def __aexit__(self, *exc):
+        await self.close()
 
     def worker_logs(self) -> str:
         try:
@@ -194,10 +207,11 @@ class QvacWorker:
         self._id += 1
         return self._id
 
-    def _send_frame(self, body: bytes):
-        self._conn.sendall(len(body).to_bytes(4, "little") + body)
+    async def _send_frame(self, body: bytes):
+        self._writer.write(len(body).to_bytes(4, "little") + body)
+        await self._writer.drain()
 
-    def _send_request(self, payload: dict) -> int:
+    async def _send_request(self, payload: dict) -> int:
         req_id = self._next_id()
         data = json.dumps(payload).encode("utf-8")
         # command == id: the server ignores `command` and routes on payload.type
@@ -209,21 +223,21 @@ class QvacWorker:
             + enc_uint(len(data))
             + data
         )
-        self._send_frame(body)
+        await self._send_frame(body)
         return req_id
 
-    def _send_stream_ctrl(self, req_id: int, flags: int):
-        self._send_frame(enc_uint(STREAM) + enc_uint(req_id) + enc_uint(flags))
+    async def _send_stream_ctrl(self, req_id: int, flags: int):
+        await self._send_frame(enc_uint(STREAM) + enc_uint(req_id) + enc_uint(flags))
 
-    def _send_request_open(self, req_id: int):
+    async def _send_request_open(self, req_id: int):
         # open the client->server request stream: a REQUEST msg with stream=OPEN
         # and no data (mirrors bare-rpc OutgoingStream._open for a REQUEST stream).
-        self._send_frame(
+        await self._send_frame(
             enc_uint(REQUEST) + enc_uint(req_id) + enc_uint(req_id) + enc_uint(S_OPEN)
         )
 
-    def _send_stream_data(self, req_id: int, flags: int, data: bytes):
-        self._send_frame(
+    async def _send_stream_data(self, req_id: int, flags: int, data: bytes):
+        await self._send_frame(
             enc_uint(STREAM)
             + enc_uint(req_id)
             + enc_uint(flags)
@@ -231,18 +245,15 @@ class QvacWorker:
             + data
         )
 
-    def _recv(self, n: int) -> bytes:
-        while len(self._rx) < n:
-            chunk = self._conn.recv(65536)
-            if not chunk:
-                raise RuntimeError("worker closed the socket")
-            self._rx += chunk
-        out, self._rx = self._rx[:n], self._rx[n:]
-        return out
+    async def _recv(self, n: int) -> bytes:
+        try:
+            return await self._reader.readexactly(n)
+        except asyncio.IncompleteReadError:
+            raise RuntimeError("worker closed the socket") from None
 
-    def _read_message(self) -> dict:
-        frame_len = int.from_bytes(self._recv(4), "little")
-        body = self._recv(frame_len)
+    async def _read_message(self) -> dict:
+        frame_len = int.from_bytes(await self._recv(4), "little")
+        body = await self._recv(frame_len)
         if DEBUG:
             print(f"[frame] len={frame_len} head={body[:24].hex()}", file=sys.stderr)
         mtype, pos = dec_uint(body, 0)
@@ -295,24 +306,24 @@ class QvacWorker:
 
     # ---- the three wire call shapes -----------------------------------------
 
-    def call(self, payload: dict) -> dict:
+    async def call(self, payload: dict) -> dict:
         """Unary: send a request, wait for its single reply, return parsed JSON."""
-        req_id = self._send_request(payload)
+        req_id = await self._send_request(payload)
         while True:
-            msg = self._read_message()
+            msg = await self._read_message()
             if msg["kind"] == "response" and msg["id"] == req_id:
                 return self._json_or_raise(msg["data"])
 
-    def call_stream(self, payload: dict):
+    async def call_stream(self, payload: dict):
         """Server-stream: send the request, OPEN + RESUME the response stream, then
         yield the newline-delimited JSON objects the worker pushes, until it ENDs."""
-        req_id = self._send_request(payload)
-        self._send_stream_ctrl(req_id, S_RESPONSE | S_OPEN)
-        self._send_stream_ctrl(req_id, S_RESPONSE | S_RESUME)
+        req_id = await self._send_request(payload)
+        await self._send_stream_ctrl(req_id, S_RESPONSE | S_OPEN)
+        await self._send_stream_ctrl(req_id, S_RESPONSE | S_RESUME)
 
         buffer = ""
         while True:
-            msg = self._read_message()
+            msg = await self._read_message()
             if msg["id"] != req_id:
                 continue
             if msg["kind"] == "response":
@@ -335,28 +346,28 @@ class QvacWorker:
                     yield self._json_or_raise(buffer.encode("utf-8"))
                 return
 
-    def _duplex_call(self, payload_obj, up_chunks):
+    async def _duplex_call(self, payload_obj, up_chunks):
         # DUPLEX: open a client->server request stream (first chunk = the JSON
         # payload, then `up_chunks`), open the server->client response stream, and
         # yield the response events. Both halves share one req id; REQUEST-masked
         # STREAM frames go up, RESPONSE-masked frames come down.
         req_id = self._next_id()
         payload = json.dumps(payload_obj).encode("utf-8")
-        self._send_request_open(req_id)  # open client->server stream
-        self._send_stream_ctrl(
+        await self._send_request_open(req_id)  # open client->server stream
+        await self._send_stream_ctrl(
             req_id, S_RESPONSE | S_OPEN
         )  # open server->client stream
-        self._send_stream_ctrl(req_id, S_RESPONSE | S_RESUME)
-        self._send_stream_data(
+        await self._send_stream_ctrl(req_id, S_RESPONSE | S_RESUME)
+        await self._send_stream_data(
             req_id, S_REQUEST | S_DATA, payload
         )  # 1st chunk = request JSON
-        for chunk in up_chunks:
-            self._send_stream_data(req_id, S_REQUEST | S_DATA, chunk)
-        self._send_stream_ctrl(req_id, S_REQUEST | S_END)  # done sending
+        async for chunk in up_chunks:
+            await self._send_stream_data(req_id, S_REQUEST | S_DATA, chunk)
+        await self._send_stream_ctrl(req_id, S_REQUEST | S_END)  # done sending
 
         buffer = ""
         while True:
-            msg = self._read_message()
+            msg = await self._read_message()
             if msg["id"] != req_id:
                 continue
             if msg["kind"] == "response":
@@ -377,6 +388,13 @@ class QvacWorker:
                 if buffer.strip():
                     yield self._json_or_raise(buffer.encode("utf-8"))
                 return
+
+
+async def _as_async_iter(items):
+    """Wraps a plain sync iterable of chunks (e.g. a list) as the AsyncIterable
+    the Transport protocol's call_duplex expects."""
+    for item in items:
+        yield item
 
 
 # ============================================================================
@@ -415,7 +433,7 @@ def _dump_failure(w, label, e):
         print("---- worker logs (tail) ----\n" + _short(logs, 2000), file=sys.stderr)
 
 
-def _load(transport, model_src, model_type, model_config=None):
+async def _load(transport, model_src, model_type, model_config=None):
     request = LoadModelRequest.model_validate(
         {
             "type": "loadModel",
@@ -424,16 +442,16 @@ def _load(transport, model_src, model_type, model_config=None):
             "modelConfig": model_config or {},
         }
     )
-    response = load_model(transport, request)
+    response = await load_model(transport, request)
     if not response.success:
         raise RuntimeError(f"loadModel failed: {response.error}")
     return response.model_id
 
 
-def demo_completion(w, model):
+async def demo_completion(w, model):
     transport = PocTransport(w)
     print(f"[loadModel] loading LLM {model} ...")
-    model_id = _load(transport, model, "llamacpp-completion")
+    model_id = await _load(transport, model, "llamacpp-completion")
     print(f"[loadModel] -> modelId={model_id!r}\n")
 
     print("[completion] streaming 'Say hello in five words.':")
@@ -446,7 +464,7 @@ def demo_completion(w, model):
         }
     )
     text = ""
-    for chunk in completion_stream(transport, request):
+    async for chunk in completion_stream(transport, request):
         for event in chunk.events:
             if event.type == "contentDelta":
                 text += event.text
@@ -455,16 +473,16 @@ def demo_completion(w, model):
     print(f"\n[completion] full text -> {text!r}")
 
 
-def demo_embed(w, model):
+async def demo_embed(w, model):
     transport = PocTransport(w)
     print(f"[loadModel] loading embedding model {model} ...")
-    model_id = _load(transport, model, "llamacpp-embedding")
+    model_id = await _load(transport, model, "llamacpp-embedding")
     print(f"[loadModel] -> modelId={model_id!r}")
 
     request = EmbedRequest.model_validate(
         {"type": "embed", "modelId": model_id, "text": "hello world"}
     )
-    response = embed(transport, request)
+    response = await embed(transport, request)
     if not response.success:
         raise RuntimeError(f"embed failed: {response.error}")
     vec = response.embedding
@@ -473,11 +491,11 @@ def demo_embed(w, model):
     )
 
 
-def demo_transcribe(w, model):
+async def demo_transcribe(w, model):
     transport = PocTransport(w)
     audio = os.environ.get("QVAC_POC_AUDIO", DEFAULT_AUDIO)
     print(f"[loadModel] loading transcription model {model} ...")
-    model_id = _load(transport, model, "parakeet-transcription")
+    model_id = await _load(transport, model, "parakeet-transcription")
     print(f"[loadModel] -> modelId={model_id!r}")
     print(f"[transcribe] {audio}:")
 
@@ -489,7 +507,7 @@ def demo_transcribe(w, model):
         }
     )
     text = ""
-    for response in transcribe(transport, request):
+    async for response in transcribe(transport, request):
         if response.text:
             text += response.text
     print(f"[transcribe] -> {text!r}")
@@ -523,7 +541,7 @@ def _wav_to_pcm_16k_mono(path, chunk_ms=100, fmt=None):
     )
 
 
-def demo_transcribe_stream(w, model):
+async def demo_transcribe_stream(w, model):
     # parakeet duplex needs: a TRUE 16 kHz mono f32le stream (resample non-16k with
     # ffmpeg first), 1 s chunks, `emitPartials` so it emits per-chunk text, and
     # ~1.5 s of trailing silence so the stream finalizes.
@@ -536,7 +554,7 @@ def demo_transcribe_stream(w, model):
     chunks += [silence[i : i + per_chunk] for i in range(0, len(silence), per_chunk)]
 
     print(f"[loadModel] loading transcription model {model} ...")
-    model_id = _load(transport, model, "parakeet-transcription")
+    model_id = await _load(transport, model, "parakeet-transcription")
     print(f"[loadModel] -> modelId={model_id!r}")
     print(f"[transcribeStream] DUPLEX: {rate}Hz mono {fmt}, {len(chunks)} chunks:")
 
@@ -548,7 +566,7 @@ def demo_transcribe_stream(w, model):
         }
     )
     text = ""
-    for response in transcribe_stream(transport, request, chunks):
+    async for response in transcribe_stream(transport, request, _as_async_iter(chunks)):
         if DEBUG:
             print(f"[event] {response}", file=sys.stderr)
         piece = response.text or (response.segment.text if response.segment else None)
@@ -574,13 +592,13 @@ def _write_wav(path, samples, rate):
         wf.writeframes(ints.tobytes())
 
 
-def demo_tts_stream(w, model):
+async def demo_tts_stream(w, model):
     transport = PocTransport(w)
     text = os.environ.get(
         "QVAC_POC_TTS_TEXT", "Hello from QVAC. This is streaming text to speech."
     )
     print(f"[loadModel] loading TTS model {model} ...")
-    model_id = _load(
+    model_id = await _load(
         transport,
         model,
         "tts-ggml",
@@ -593,7 +611,9 @@ def demo_tts_stream(w, model):
         {"type": "textToSpeechStream", "modelId": model_id}
     )
     samples, rate, events = [], None, 0
-    for response in text_to_speech_stream(transport, request, [text.encode("utf-8")]):
+    async for response in text_to_speech_stream(
+        transport, request, _as_async_iter([text.encode("utf-8")])
+    ):
         events += 1
         if DEBUG:
             print(
@@ -630,11 +650,13 @@ CASES = [
 ]
 
 
-def main():
-    with QvacWorker() as w:
+async def main():
+    async with QvacWorker() as w:
         transport = PocTransport(w)
         print("[poc] worker connected\n")
-        heartbeat_response = heartbeat(transport, HeartbeatRequest(type="heartbeat"))
+        heartbeat_response = await heartbeat(
+            transport, HeartbeatRequest(type="heartbeat")
+        )
         print(f"[heartbeat] -> {heartbeat_response}\n")
 
         ran = False
@@ -644,7 +666,7 @@ def main():
                 continue
             ran = True
             try:
-                fn(w, model)
+                await fn(w, model)
                 print()
             except Exception as e:
                 _dump_failure(w, label, e)
@@ -656,4 +678,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())

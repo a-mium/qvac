@@ -4,6 +4,8 @@ request, validates the response, and raises on failure — the same job the
 JS convenience functions do on top of the raw generated stubs
 (`qvac._generated.methods`).
 
+Asyncio-native, matching the JS SDK and qvac._transport.Transport.
+
 Only the wrappers whose entire behavior is reproducible from the wire
 request/response schemas are here (cancel, unload_model, invoke_plugin(_stream),
 model_registry_*, delete_cache). Wrappers with real client-side state or
@@ -15,7 +17,7 @@ and intentionally not ported here.
 
 from __future__ import annotations
 
-from typing import Any, Iterator
+from typing import Any, AsyncIterator
 
 from ._generated import (
     CancelRequest,
@@ -69,7 +71,7 @@ def _dump(model: Any) -> dict[str, Any]:
     return model.model_dump(mode="json", by_alias=True, exclude_unset=True)
 
 
-def cancel(
+async def cancel(
     transport: Transport,
     *,
     request_id: str | None = None,
@@ -93,12 +95,12 @@ def cancel(
         raise ValueError("cancel needs either request_id or model_id")
 
     request = CancelRequest.model_validate({"type": "cancel", **wire})
-    response = CancelResponse.model_validate(transport.call(_dump(request)))
+    response = CancelResponse.model_validate(await transport.call(_dump(request)))
     if not response.success:
         raise CancelFailedError(response.error)
 
 
-def unload_model(
+async def unload_model(
     transport: Transport, model_id: str, clear_storage: bool = False
 ) -> None:
     """Core wire semantics only — no client-side auto-close of the
@@ -109,12 +111,12 @@ def unload_model(
     request = UnloadModelRequest.model_validate(
         {"type": "unloadModel", "modelId": model_id, "clearStorage": clear_storage}
     )
-    response = UnloadModelResponse.model_validate(transport.call(_dump(request)))
+    response = UnloadModelResponse.model_validate(await transport.call(_dump(request)))
     if not response.success:
         raise ModelUnloadFailedError(model_id)
 
 
-def invoke_plugin(
+async def invoke_plugin(
     transport: Transport, model_id: str, handler: str, params: Any = None
 ) -> Any:
     request = PluginInvokeRequest.model_validate(
@@ -125,13 +127,13 @@ def invoke_plugin(
             "params": params,
         }
     )
-    response = PluginInvokeResponse.model_validate(transport.call(_dump(request)))
+    response = PluginInvokeResponse.model_validate(await transport.call(_dump(request)))
     return response.result
 
 
-def invoke_plugin_stream(
+async def invoke_plugin_stream(
     transport: Transport, model_id: str, handler: str, params: Any = None
-) -> Iterator[Any]:
+) -> AsyncIterator[Any]:
     request = PluginInvokeStreamRequest.model_validate(
         {
             "type": "pluginInvokeStream",
@@ -140,7 +142,7 @@ def invoke_plugin_stream(
             "params": params,
         }
     )
-    for chunk in transport.call_stream(_dump(request)):
+    async for chunk in transport.call_stream(_dump(request)):
         response = PluginInvokeStreamResponse.model_validate(chunk)
         if not response.done:
             yield response.result
@@ -155,16 +157,18 @@ def _validate_registry_response(
         )
 
 
-def model_registry_list(
+async def model_registry_list(
     transport: Transport,
 ) -> list[ModelRegistryListResponseModelsItem]:
     request = ModelRegistryListRequest.model_validate({"type": "modelRegistryList"})
-    response = ModelRegistryListResponse.model_validate(transport.call(_dump(request)))
+    response = ModelRegistryListResponse.model_validate(
+        await transport.call(_dump(request))
+    )
     _validate_registry_response(response)
     return response.models or []
 
 
-def model_registry_search(
+async def model_registry_search(
     transport: Transport,
     *,
     filter: str | None = None,
@@ -188,13 +192,13 @@ def model_registry_search(
 
     request = ModelRegistrySearchRequest.model_validate(payload)
     response = ModelRegistrySearchResponse.model_validate(
-        transport.call(_dump(request))
+        await transport.call(_dump(request))
     )
     _validate_registry_response(response)
     return response.models or []
 
 
-def model_registry_get_model(
+async def model_registry_get_model(
     transport: Transport, registry_path: str, registry_source: str
 ) -> ModelRegistryGetModelResponseModel:
     request = ModelRegistryGetModelRequest.model_validate(
@@ -205,7 +209,7 @@ def model_registry_get_model(
         }
     )
     response = ModelRegistryGetModelResponse.model_validate(
-        transport.call(_dump(request))
+        await transport.call(_dump(request))
     )
     _validate_registry_response(
         response, f"Model not found: {registry_source}/{registry_path}"
@@ -214,7 +218,7 @@ def model_registry_get_model(
     return response.model
 
 
-def delete_cache(
+async def delete_cache(
     transport: Transport,
     *,
     all: bool | None = None,
@@ -231,7 +235,7 @@ def delete_cache(
         raise InvalidDeleteCacheParamsError()
 
     request = DeleteCacheRequest.model_validate(payload)
-    response = DeleteCacheResponse.model_validate(transport.call(_dump(request)))
+    response = DeleteCacheResponse.model_validate(await transport.call(_dump(request)))
     if not response.success and response.error:
         raise DeleteCacheFailedError(response.error)
     return {"success": response.success}

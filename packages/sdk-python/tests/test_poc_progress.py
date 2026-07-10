@@ -56,10 +56,10 @@ pytestmark = [
 
 
 @pytest.fixture
-def worker():
+async def worker():
     from poc_heartbeat import QvacWorker
 
-    with QvacWorker() as w:
+    async with QvacWorker() as w:
         yield w
 
 
@@ -70,7 +70,7 @@ def transport(worker):
     return PocTransport(worker)
 
 
-def test_load_model_with_progress_streams_real_progress_then_terminal_reply(
+async def test_load_model_with_progress_streams_real_progress_then_terminal_reply(
     transport,
 ) -> None:
     from qvac._generated import (
@@ -89,7 +89,7 @@ def test_load_model_with_progress_streams_real_progress_then_terminal_reply(
         }
     )
 
-    events = list(load_model_with_progress(transport, params))
+    events = [e async for e in load_model_with_progress(transport, params)]
 
     assert events, "expected at least one event from a progress-capable call"
 

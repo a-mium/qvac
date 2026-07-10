@@ -13,10 +13,11 @@ dependencies = ["pydantic>=2.6,<3"]
 
 [project.optional-dependencies]
 gen = ["datamodel-code-generator==0.68.0", "black==26.5.1"]
-dev = ["pytest==9.1.1"]
+dev = ["pytest==9.1.1", "pytest-asyncio==1.4.0"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/qvac"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+asyncio_mode = "auto"

@@ -74,8 +74,16 @@ def test_methods_module_has_one_function_per_manifest_entry_with_matching_shape(
     rendered = generate.render_methods_module(manifest_methods)
     tree = ast.parse(rendered)
     functions_by_name = {
-        node.name: node for node in ast.walk(tree) if isinstance(node, ast.FunctionDef)
+        node.name: node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.AsyncFunctionDef)
     }
+    sync_functions = [
+        node.name for node in ast.walk(tree) if isinstance(node, ast.FunctionDef)
+    ]
+    assert (
+        not sync_functions
+    ), f"expected every method stub to be async def, found sync: {sync_functions}"
 
     for method in manifest_methods:
         func_name = generate.snake_case(method["name"])
@@ -127,7 +135,9 @@ def test_progress_capable_methods_get_a_with_progress_stub(
     rendered = generate.render_methods_module(manifest_methods)
     tree = ast.parse(rendered)
     functions_by_name = {
-        node.name: node for node in ast.walk(tree) if isinstance(node, ast.FunctionDef)
+        node.name: node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.AsyncFunctionDef)
     }
 
     progress_methods = {m["name"] for m in manifest_methods if m.get("progress")}
