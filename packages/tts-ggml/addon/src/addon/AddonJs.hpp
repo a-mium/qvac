@@ -11,7 +11,6 @@
 #include <utility>
 #include <vector>
 
-#include <js.h>
 #include <inference-addon-cpp/JsInterface.hpp>
 #include <inference-addon-cpp/JsUtils.hpp>
 #include <inference-addon-cpp/ModelInterfaces.hpp>
@@ -19,6 +18,7 @@
 #include <inference-addon-cpp/handlers/JsOutputHandlerImplementations.hpp>
 #include <inference-addon-cpp/handlers/OutputHandler.hpp>
 #include <inference-addon-cpp/queue/OutputCallbackJs.hpp>
+#include <js.h>
 #include <tts-cpp/lavasr/denoiser.h>
 
 #include "js-interface/JSAdapter.hpp"
@@ -246,11 +246,12 @@ inline void dnSetenv(const char* name, const char* value) {
 // gpu-vs-twin nrmse as a cross-backend drift metric.
 inline js_value_t* denoiserBench(js_env_t* env, js_callback_info_t* info) try {
   using namespace qvac_lib_inference_addon_cpp;
-  using clk  = std::chrono::steady_clock;
-  using msT  = std::chrono::duration<double, std::milli>;
+  using clk = std::chrono::steady_clock;
+  using msT = std::chrono::duration<double, std::milli>;
 
   JsArgsParser args(env, info);
-  auto modelPath = js::String(env, args.get(0, "modelPath")).as<std::string>(env);
+  auto modelPath =
+      js::String(env, args.get(0, "modelPath")).as<std::string>(env);
 
   // Force the fused OpenCL ops on for the GPU denoiser graph.
   dnSetenv("LAVASR_DN_GRU_OP", "1");
@@ -259,33 +260,34 @@ inline js_value_t* denoiserBench(js_env_t* env, js_callback_info_t* info) try {
   dnSetenv("LAVASR_DN_SHUF_OP", "1");
   dnSetenv("LAVASR_DN_AP_OP", "1");
 
-  constexpr int    kSr      = 16000;
+  constexpr int kSr = 16000;
   constexpr double kSeconds = 10.0;
-  constexpr int    kRuns    = 3;
-  constexpr double kPi      = 3.14159265358979323846;
+  constexpr int kRuns = 3;
+  constexpr double kPi = 3.14159265358979323846;
 
-  // Deterministic speech-band synthetic input (denoiser RTF is content-independent).
-  const size_t nSamp = (size_t) (kSeconds * kSr);
+  // Deterministic speech-band synthetic input (denoiser RTF is
+  // content-independent).
+  const size_t nSamp = (size_t)(kSeconds * kSr);
   std::vector<float> pcm(nSamp);
   for (size_t i = 0; i < nSamp; i++) {
-    double t = (double) i / kSr;
-    pcm[i] = (float) (0.15 * std::sin(2 * kPi * 180.0 * t) +
-                      0.10 * std::sin(2 * kPi * 440.0 * t) +
-                      0.05 * std::sin(2 * kPi * 900.0 * t));
+    double t = (double)i / kSr;
+    pcm[i] = (float)(0.15 * std::sin(2 * kPi * 180.0 * t) +
+                     0.10 * std::sin(2 * kPi * 440.0 * t) +
+                     0.05 * std::sin(2 * kPi * 900.0 * t));
   }
 
-  auto dnGpu  = tts_cpp::lavasr::Denoiser::load(modelPath, 999);  // OpenCL GPU
-  auto dnCpu  = tts_cpp::lavasr::Denoiser::load(modelPath, 0);    // scalar CPU
-  auto dnTwin = tts_cpp::lavasr::Denoiser::load(modelPath, -1);   // ggml-CPU twin
+  auto dnGpu = tts_cpp::lavasr::Denoiser::load(modelPath, 999); // OpenCL GPU
+  auto dnCpu = tts_cpp::lavasr::Denoiser::load(modelPath, 0);   // scalar CPU
+  auto dnTwin = tts_cpp::lavasr::Denoiser::load(modelPath, -1); // ggml-CPU twin
 
   auto medianMs = [&](const tts_cpp::lavasr::Denoiser& d,
                       std::vector<float>& out) -> double {
-    out = d.denoise(pcm, kSr);  // warmup
+    out = d.denoise(pcm, kSr); // warmup
     std::vector<double> t;
     t.reserve(kRuns);
     for (int r = 0; r < kRuns; r++) {
       auto a = clk::now();
-      out    = d.denoise(pcm, kSr);
+      out = d.denoise(pcm, kSr);
       auto b = clk::now();
       t.push_back(msT(b - a).count());
     }
@@ -296,31 +298,33 @@ inline js_value_t* denoiserBench(js_env_t* env, js_callback_info_t* info) try {
   std::vector<float> gpuOut, cpuOut, twinOut;
   const double gpuMs = medianMs(*dnGpu, gpuOut);
   const double cpuMs = medianMs(*dnCpu, cpuOut);
-  (void) medianMs(*dnTwin, twinOut);  // only for the OpenCL-ran discriminator
+  (void)medianMs(*dnTwin, twinOut); // only for the OpenCL-ran discriminator
 
-  auto nrmseOf = [](const std::vector<float>& a, const std::vector<float>& b,
+  auto nrmseOf = [](const std::vector<float>& a,
+                    const std::vector<float>& b,
                     double& cosSimOut) -> double {
-    double       se = 0, sr2 = 0, dot = 0, na = 0, nb = 0;
+    double se = 0, sr2 = 0, dot = 0, na = 0, nb = 0;
     const size_t m = std::min(a.size(), b.size());
     for (size_t i = 0; i < m; i++) {
-      double d = (double) a[i] - (double) b[i];
+      double d = (double)a[i] - (double)b[i];
       se += d * d;
-      sr2 += (double) b[i] * b[i];
-      dot += (double) a[i] * b[i];
-      na += (double) a[i] * a[i];
-      nb += (double) b[i] * b[i];
+      sr2 += (double)b[i] * b[i];
+      dot += (double)a[i] * b[i];
+      na += (double)a[i] * a[i];
+      nb += (double)b[i] * b[i];
     }
     cosSimOut = dot / (std::sqrt(na) * std::sqrt(nb) + 1e-12);
     return std::sqrt(se / (sr2 + 1e-12));
   };
 
-  double       cosSim = 0.0, twinCos = 0.0;
-  const double nrmse      = nrmseOf(gpuOut, cpuOut, cosSim);    // GPU vs scalar CPU
-  const double twinNrmse  = nrmseOf(gpuOut, twinOut, twinCos);  // GPU vs ggml-CPU twin
+  double cosSim = 0.0, twinCos = 0.0;
+  const double nrmse = nrmseOf(gpuOut, cpuOut, cosSim); // GPU vs scalar CPU
+  const double twinNrmse =
+      nrmseOf(gpuOut, twinOut, twinCos); // GPU vs ggml-CPU twin
 
-  const bool        openclRan       = dnGpu->backend_name() == "OpenCL";
-  const bool        openclHwPresent = qvac::ttsggml::openclDevicePresent();
-  const std::string gpuDevice       = qvac::ttsggml::firstGpuDeviceDescription();
+  const bool openclRan = dnGpu->backend_name() == "OpenCL";
+  const bool openclHwPresent = qvac::ttsggml::openclDevicePresent();
+  const std::string gpuDevice = qvac::ttsggml::firstGpuDeviceDescription();
 
   auto result = js::Object::create(env);
   result.setProperty(env, "gpuMs", js::Number::create(env, gpuMs));
@@ -329,13 +333,14 @@ inline js_value_t* denoiserBench(js_env_t* env, js_callback_info_t* info) try {
   result.setProperty(env, "nrmse", js::Number::create(env, nrmse));
   result.setProperty(env, "twinNrmse", js::Number::create(env, twinNrmse));
   result.setProperty(env, "openclRan", js::Boolean::create(env, openclRan));
-  result.setProperty(env, "openclHwPresent", js::Boolean::create(env, openclHwPresent));
+  result.setProperty(
+      env, "openclHwPresent", js::Boolean::create(env, openclHwPresent));
   result.setProperty(env, "gpuDevice", js::String::create(env, gpuDevice));
   result.setProperty(
-      env, "n",
-      js::Number::create(env, (double) std::min(gpuOut.size(), cpuOut.size())));
+      env,
+      "n",
+      js::Number::create(env, (double)std::min(gpuOut.size(), cpuOut.size())));
   return result;
 }
 JSCATCH
-
 }
