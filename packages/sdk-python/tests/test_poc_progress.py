@@ -13,7 +13,7 @@ branch — a real code path, purely local disk I/O and checksum verification,
 no network — which still emits a real synthetic 100% `modelProgress` event
 before the terminal reply.
 
-Needs the SDK's Bare worker built (same QVAC_POC_SDK_DIR requirement as
+Needs the SDK's Bare worker built (same monorepo-relative default as
 test_poc_smoke.py) and that model already cached locally (QVAC_POC_MODEL,
 defaulting to `~/.qvac/models/5b8aae816570a09d_Qwen3-0.6B-Q4_0.gguf`);
 skipped when either is missing.
@@ -26,6 +26,7 @@ from pathlib import Path
 
 import pytest
 
+from poc_heartbeat import WORKER
 from qvac.models import QWEN3_600M_INST_Q4
 
 DEFAULT_MODEL = str(
@@ -40,8 +41,8 @@ REGISTRY_MODEL_SRC = QWEN3_600M_INST_Q4.src
 
 pytestmark = [
     pytest.mark.skipif(
-        "QVAC_POC_SDK_DIR" not in os.environ,
-        reason="set QVAC_POC_SDK_DIR to a built SDK checkout to run the PoC progress test",
+        not os.path.exists(WORKER),
+        reason=f"no built SDK worker found at {WORKER!r} -- run `bun run build` in packages/sdk, or set QVAC_POC_SDK_DIR",
     ),
     pytest.mark.skipif(
         not MODEL_PATH.is_file(),

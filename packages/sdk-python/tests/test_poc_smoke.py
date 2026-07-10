@@ -2,9 +2,10 @@
 via the hand-written PoC transport (poc_heartbeat.py / poc_transport.py) —
 the production socket transport isn't built yet.
 
-Needs the SDK's Bare worker built (`bun run build` in packages/sdk) and the
-Bare runtime prebuild available; skipped unless QVAC_POC_SDK_DIR points at a
-built SDK checkout, so it never blocks a normal `pytest` run or CI.
+Needs the SDK's Bare worker built (`bun run build` in packages/sdk); defaults
+to the monorepo-relative `../../sdk` (QVAC_POC_SDK_DIR overrides for an SDK
+checkout elsewhere). Skipped unless a built worker is actually found there,
+so it never blocks a normal `pytest` run or CI without one.
 
 Only exercises request-reply methods that need no loaded model (`heartbeat`,
 `state`) — server-stream/duplex methods need a downloaded model, which this
@@ -17,9 +18,11 @@ import os
 
 import pytest
 
+from poc_heartbeat import WORKER
+
 pytestmark = pytest.mark.skipif(
-    "QVAC_POC_SDK_DIR" not in os.environ,
-    reason="set QVAC_POC_SDK_DIR to a built SDK checkout to run the PoC smoke test",
+    not os.path.exists(WORKER),
+    reason=f"no built SDK worker found at {WORKER!r} -- run `bun run build` in packages/sdk, or set QVAC_POC_SDK_DIR",
 )
 
 
