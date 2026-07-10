@@ -408,7 +408,7 @@ jobs:
           set -euo pipefail
           echo "Downloading GR00T test artefacts from S3..."
           mkdir -p model/vla/groot test/groot-oracle
-          S3_BASE="s3://${{ secrets.MODEL_S3_BUCKET }}/qvac_models_compiled/vla/groot-n1.7-3b/2026-07-09"
+          S3_BASE="s3://${{ secrets.MODEL_S3_BUCKET }}/qvac_models_compiled/vla/groot-n1.7-3b/2026-07-10"
           aws s3 cp "$S3_BASE/groot-q8_vf16.gguf"          model/vla/groot/groot-q8_vf16.gguf
           aws s3 cp "$S3_BASE/activations_v4.safetensors"  test/groot-oracle/activations_v4.safetensors
           echo "GR00T asset state after download:"
