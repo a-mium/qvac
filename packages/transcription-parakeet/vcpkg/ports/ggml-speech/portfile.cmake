@@ -127,6 +127,21 @@ if(VCPKG_TARGET_IS_LINUX AND VCPKG_TARGET_ARCHITECTURE STREQUAL "arm64")
         -DGGML_BACKEND_DL=ON
         -DGGML_CPU_ALL_VARIANTS=ON
         -DGGML_CPU_REPACK=ON
+        # The dlopen'd MODULE backends must not carry shared-library
+        # dependencies the host machine doesn't ship. The qvac linux
+        # triplets compile with clang -stdlib=libc++ but only the final
+        # addon binary links libc++ statically; a module with NEEDED
+        # libc++.so.1 / libc++abi.so.1 entries fails to dlopen on a
+        # stock runner (no libc++ runtime package) and the registry
+        # loader skips it *silently* -- the CPU backend then simply
+        # never registers ("no CPU device registered"). Link the C++
+        # runtime statically into the modules instead, matching the
+        # addon convention. Composed with the triplet's own
+        # VCPKG_LINKER_FLAGS because a bare -DCMAKE_MODULE_LINKER_FLAGS
+        # would override vcpkg's *_INIT seeding and drop the triplet's
+        # -stdlib=libc++ at link time (under gcc triplets this composes
+        # to plain -static-libstdc++, which is equally valid).
+        "-DCMAKE_MODULE_LINKER_FLAGS=${VCPKG_LINKER_FLAGS} -static-libstdc++"
     )
 endif()
 
