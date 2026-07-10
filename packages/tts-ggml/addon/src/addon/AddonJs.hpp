@@ -22,6 +22,7 @@
 #include <tts-cpp/lavasr/denoiser.h>
 
 #include "js-interface/JSAdapter.hpp"
+#include "model-interface/BackendUtils.hpp"
 #include "model-interface/chatterbox/ChatterboxModel.hpp"
 #include "model-interface/supertonic/SupertonicModel.hpp"
 
@@ -240,9 +241,9 @@ inline void dnSetenv(const char* name, const char* value) {
 
 // denoiserBench(modelPath): A/B the LavaSR denoiser on GPU (OpenCL, fused ops)
 // vs scalar CPU over a fixed synthetic input, returning timing + parity so a
-// mobile test can log per-device GPU-vs-CPU numbers.  A ggml-CPU "twin"
-// (n_gpu_layers=-1) runs the same graph on the CPU backend: gpu-vs-twin nrmse
-// is >0 only when OpenCL actually executed (==0 means a silent CPU fallback).
+// mobile test can log per-device GPU-vs-CPU numbers.  openclRan is ground
+// truth from the engine's backend; a ggml-CPU "twin" (n_gpu_layers=-1) adds
+// gpu-vs-twin nrmse as a cross-backend drift metric.
 inline js_value_t* denoiserBench(js_env_t* env, js_callback_info_t* info) try {
   using namespace qvac_lib_inference_addon_cpp;
   using clk  = std::chrono::steady_clock;
@@ -316,7 +317,10 @@ inline js_value_t* denoiserBench(js_env_t* env, js_callback_info_t* info) try {
   double       cosSim = 0.0, twinCos = 0.0;
   const double nrmse      = nrmseOf(gpuOut, cpuOut, cosSim);    // GPU vs scalar CPU
   const double twinNrmse  = nrmseOf(gpuOut, twinOut, twinCos);  // GPU vs ggml-CPU twin
-  const bool   openclRan  = twinNrmse > 0.0;
+
+  const bool        openclRan       = dnGpu->backend_name() == "OpenCL";
+  const bool        openclHwPresent = qvac::ttsggml::openclDevicePresent();
+  const std::string gpuDevice       = qvac::ttsggml::firstGpuDeviceDescription();
 
   auto result = js::Object::create(env);
   result.setProperty(env, "gpuMs", js::Number::create(env, gpuMs));
@@ -325,6 +329,8 @@ inline js_value_t* denoiserBench(js_env_t* env, js_callback_info_t* info) try {
   result.setProperty(env, "nrmse", js::Number::create(env, nrmse));
   result.setProperty(env, "twinNrmse", js::Number::create(env, twinNrmse));
   result.setProperty(env, "openclRan", js::Boolean::create(env, openclRan));
+  result.setProperty(env, "openclHwPresent", js::Boolean::create(env, openclHwPresent));
+  result.setProperty(env, "gpuDevice", js::String::create(env, gpuDevice));
   result.setProperty(
       env, "n",
       js::Number::create(env, (double) std::min(gpuOut.size(), cpuOut.size())));

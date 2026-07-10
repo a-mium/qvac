@@ -8,8 +8,11 @@
 // graph would reject a fused op.  Loads the bundled 494 KiB denoiser GGUF and
 // runs denoise() on the GPU and on the scalar CPU over a fixed synthetic input,
 // then logs a PERF_REPORT the device farm scrapes so we can read per-device
-// GPU-vs-CPU numbers.  A ggml-CPU "twin" isolates the backend: twin_nrmse > 0
-// only when OpenCL actually executed (0 = silent CPU fallback).
+// GPU-vs-CPU numbers.  opencl_ran is ground truth from the engine's backend;
+// it is asserted only when ggml enumerates an OpenCL device (opencl_hw_present)
+// so non-Adreno devices (e.g. Pixel/Tensor: no OpenCL ICD) pass on their
+// policy CPU fallback while a silent fallback on Adreno still fails loudly.
+// A ggml-CPU "twin" adds twin_nrmse as a cross-backend drift metric.
 
 const fs = require('bare-fs')
 const os = require('bare-os')
@@ -69,6 +72,8 @@ test('LavaSR denoiser GPU(OpenCL)-vs-CPU bench', { timeout: 600000, skip: !isAnd
         nrmse: r.nrmse,
         twin_nrmse: r.twinNrmse,
         opencl_ran: r.openclRan,
+        opencl_hw_present: r.openclHwPresent,
+        gpu_device: r.gpuDevice,
         samples: r.n
       }
     }]
@@ -77,9 +82,14 @@ test('LavaSR denoiser GPU(OpenCL)-vs-CPU bench', { timeout: 600000, skip: !isAnd
   console.log(
     `[denoiser-bench] gpu=${r.gpuMs.toFixed(1)}ms cpu=${r.cpuMs.toFixed(1)}ms ` +
     `speedup=${(r.cpuMs / r.gpuMs).toFixed(3)}x cos_sim=${r.cosSim.toFixed(6)} ` +
-    `nrmse=${r.nrmse.toExponential(2)} opencl_ran=${r.openclRan}`)
+    `nrmse=${r.nrmse.toExponential(2)} opencl_ran=${r.openclRan} ` +
+    `opencl_hw_present=${r.openclHwPresent} gpu_device=${r.gpuDevice || 'none'}`)
 
   t.ok(r.gpuMs > 0 && r.cpuMs > 0, 'denoiser produced finite GPU + CPU timings')
   t.ok(r.cosSim > 0.999, `GPU vs CPU parity (cos_sim=${r.cosSim.toFixed(6)} > 0.999)`)
-  t.ok(r.openclRan, 'OpenCL backend actually executed (twin_nrmse > 0)')
+  if (r.openclHwPresent) {
+    t.ok(r.openclRan, `OpenCL device present (${r.gpuDevice}) so the OpenCL backend must run`)
+  } else {
+    t.pass(`no OpenCL device (gpu: ${r.gpuDevice || 'none'}) — CPU fallback by policy`)
+  }
 })

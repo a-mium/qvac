@@ -65,4 +65,43 @@ inline bool androidOffAllowlistGpuPresent() {
   }
   return false;
 }
+
+// True when ggml registered an OpenCL device (Adreno-class GPU with a working
+// OpenCL ICD). Read-only enumeration; never inits a device or backend.
+inline bool openclDevicePresent() {
+  const size_t count = ggml_backend_dev_count();
+  for (size_t i = 0; i < count; ++i) {
+    ggml_backend_dev_t dev = ggml_backend_dev_get(i);
+    if (dev == nullptr)
+      continue;
+    ggml_backend_reg_t reg = ggml_backend_dev_backend_reg(dev);
+    const char* rn = reg != nullptr ? ggml_backend_reg_name(reg) : nullptr;
+    if (rn != nullptr && std::string(rn) == "OpenCL")
+      return true;
+  }
+  return false;
+}
+
+// Description (falling back to name) of the first GPU/iGPU device ggml
+// enumerates, "" when none. Read-only, for diagnostics/perf reports.
+inline std::string firstGpuDeviceDescription() {
+  const size_t count = ggml_backend_dev_count();
+  for (size_t i = 0; i < count; ++i) {
+    ggml_backend_dev_t dev = ggml_backend_dev_get(i);
+    if (dev == nullptr)
+      continue;
+    const enum ggml_backend_dev_type type = ggml_backend_dev_type(dev);
+    if (type != GGML_BACKEND_DEVICE_TYPE_GPU &&
+        type != GGML_BACKEND_DEVICE_TYPE_IGPU) {
+      continue;
+    }
+    const char* desc = ggml_backend_dev_description(dev);
+    if (desc != nullptr && desc[0] != '\0')
+      return desc;
+    const char* name = ggml_backend_dev_name(dev);
+    if (name != nullptr)
+      return name;
+  }
+  return "";
+}
 }
