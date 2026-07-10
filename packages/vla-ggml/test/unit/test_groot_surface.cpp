@@ -19,7 +19,7 @@
 
 namespace {
 
-constexpr int N_IMAGES = 4;    // 2 cameras × 2 frames
+constexpr int N_IMAGES = 4; // 2 cameras × 2 frames
 constexpr int PATCHES_PER_IMG = 256;
 constexpr int IN_FLAT = 1536;
 constexpr int T_TOK = 280;
@@ -29,7 +29,8 @@ constexpr int N_ACT = 40;
 constexpr int ACT_DIM = 132;
 constexpr int IMAGE_SIZE = 256;
 constexpr int NUM_CAMERAS = 2;
-constexpr int N_MERGED = 256; // 4 imgs × 64 merged patches — image-placeholder count
+constexpr int N_MERGED =
+    256; // 4 imgs × 64 merged patches — image-placeholder count
 
 const char* envOrNull(const char* name) {
   const char* v = std::getenv(name);
@@ -39,21 +40,21 @@ const char* envOrNull(const char* name) {
 } // namespace
 
 TEST(GrootSurface, HparamsBackendSurfaceAndHostRejection) {
-  const char* gguf_path = envOrNull("GROOT_TEST_GGUF");
-  const char* act_path = envOrNull("GROOT_TEST_ACTIVATIONS_V3");
-  if (gguf_path == nullptr || act_path == nullptr) {
+  const char* ggufPath = envOrNull("GROOT_TEST_GGUF");
+  const char* actPath = envOrNull("GROOT_TEST_ACTIVATIONS_V3");
+  if (ggufPath == nullptr || actPath == nullptr) {
     GTEST_SKIP() << "Set GROOT_TEST_GGUF and GROOT_TEST_ACTIVATIONS_V3 to run "
                     "the GrootModel surface test.";
   }
 
   // ── Real fixture inputs (same as the smoke test) ──────────────────────
   qvac_vla_safetensors_lite::Reader act;
-  ASSERT_NO_THROW(act.open(act_path));
+  ASSERT_NO_THROW(act.open(actPath));
 
-  const std::vector<float> patches =
-      act.readF32("vision_input.call0.args.0");
-  ASSERT_EQ(patches.size(),
-            static_cast<size_t>(N_IMAGES) * PATCHES_PER_IMG * IN_FLAT);
+  const std::vector<float> patches = act.readF32("vision_input.call0.args.0");
+  ASSERT_EQ(
+      patches.size(),
+      static_cast<size_t>(N_IMAGES) * PATCHES_PER_IMG * IN_FLAT);
   std::vector<const float*> images(N_IMAGES);
   for (int i = 0; i < N_IMAGES; ++i) {
     images[i] =
@@ -82,7 +83,7 @@ TEST(GrootSurface, HparamsBackendSurfaceAndHostRejection) {
   using qvac_lib_infer_vla_ggml::VlaHparamsGeneric;
   using qvac_lib_infer_vla_ggml::VlaTimingGeneric;
   auto model = std::make_unique<GrootModel>(
-      std::string(gguf_path), /*forceCpu=*/true, /*backendsDir=*/"");
+      std::string(ggufPath), /*forceCpu=*/true, /*backendsDir=*/"");
   ASSERT_NE(model, nullptr);
 
   // ── hparams surface ───────────────────────────────────────────────────
@@ -93,17 +94,16 @@ TEST(GrootSurface, HparamsBackendSurfaceAndHostRejection) {
   EXPECT_EQ(hp.max_state_dim, STATE_DIM);
   EXPECT_EQ(hp.vision_image_size, IMAGE_SIZE);
   EXPECT_EQ(hp.num_cameras, NUM_CAMERAS);
-  EXPECT_EQ(
-      hp.state_input_mode,
-      VlaHparamsGeneric::StateInputMode::Continuous);
+  EXPECT_EQ(hp.state_input_mode, VlaHparamsGeneric::StateInputMode::Continuous);
 
   // ── Backend surface (forceCpu) ────────────────────────────────────────
-  std::string backend_name_lower = model->backendName();
+  std::string backendNameLower = model->backendName();
   std::transform(
-      backend_name_lower.begin(), backend_name_lower.end(),
-      backend_name_lower.begin(),
+      backendNameLower.begin(),
+      backendNameLower.end(),
+      backendNameLower.begin(),
       [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-  EXPECT_EQ(backend_name_lower, "cpu");
+  EXPECT_EQ(backendNameLower, "cpu");
   EXPECT_FALSE(model->hasGpu());
 
   // ── Host-side rejection matrix ────────────────────────────────────────
@@ -113,34 +113,79 @@ TEST(GrootSurface, HparamsBackendSurfaceAndHostRejection) {
   int nActionsOut = -1;
   VlaTimingGeneric timing{};
 
-  auto callWith = [&](const float** imgs, int nImages, int imgW, int imgH,
-                      const float* st, int stDim, const int32_t* toks,
-                      const bool* mask, int len) {
+  auto callWith = [&](const float** imgs,
+                      int nImages,
+                      int imgW,
+                      int imgH,
+                      const float* st,
+                      int stDim,
+                      const int32_t* toks,
+                      const bool* mask,
+                      int len) {
     nActionsOut = -1;
     return model->infer(
-        imgs, nImages, imgW, imgH, st, stDim, toks, mask, len, noise.data(),
-        actionsOut.data(), &nActionsOut, &timing);
+        imgs,
+        nImages,
+        imgW,
+        imgH,
+        st,
+        stDim,
+        toks,
+        mask,
+        len,
+        noise.data(),
+        actionsOut.data(),
+        &nActionsOut,
+        &timing);
   };
 
   // nImages < 1.
   EXPECT_FALSE(callWith(
-      images.data(), 0, IMAGE_SIZE, IMAGE_SIZE, state.data(), STATE_DIM,
-      tokens.data(), langMask, T_TOK));
+      images.data(),
+      0,
+      IMAGE_SIZE,
+      IMAGE_SIZE,
+      state.data(),
+      STATE_DIM,
+      tokens.data(),
+      langMask,
+      T_TOK));
 
   // Non-square image dims.
   EXPECT_FALSE(callWith(
-      images.data(), N_IMAGES, IMAGE_SIZE, IMAGE_SIZE + 16, state.data(),
-      STATE_DIM, tokens.data(), langMask, T_TOK));
+      images.data(),
+      N_IMAGES,
+      IMAGE_SIZE,
+      IMAGE_SIZE + 16,
+      state.data(),
+      STATE_DIM,
+      tokens.data(),
+      langMask,
+      T_TOK));
 
   // Zero image dim.
   EXPECT_FALSE(callWith(
-      images.data(), N_IMAGES, 0, 0, state.data(), STATE_DIM, tokens.data(),
-      langMask, T_TOK));
+      images.data(),
+      N_IMAGES,
+      0,
+      0,
+      state.data(),
+      STATE_DIM,
+      tokens.data(),
+      langMask,
+      T_TOK));
 
   // state_dim mismatch (must equal max_state_dim).
   EXPECT_FALSE(callWith(
-      images.data(), N_IMAGES, IMAGE_SIZE, IMAGE_SIZE, state.data(),
-      STATE_DIM - 1, tokens.data(), langMask, T_TOK));
+      images.data(),
+      N_IMAGES,
+      IMAGE_SIZE,
+      IMAGE_SIZE,
+      state.data(),
+      STATE_DIM - 1,
+      tokens.data(),
+      langMask,
+      T_TOK));
 
   // Wrong image-placeholder-token count: drop one image token so
   // nImgTok != nMerged.
@@ -160,25 +205,53 @@ TEST(GrootSurface, HparamsBackendSurfaceAndHostRejection) {
     }
     ASSERT_EQ(imgTok, N_MERGED - 1); // sanity: we really removed one
     EXPECT_FALSE(callWith(
-        images.data(), N_IMAGES, IMAGE_SIZE, IMAGE_SIZE, state.data(),
-        STATE_DIM, badTokens.data(), langMask, T_TOK));
+        images.data(),
+        N_IMAGES,
+        IMAGE_SIZE,
+        IMAGE_SIZE,
+        state.data(),
+        STATE_DIM,
+        badTokens.data(),
+        langMask,
+        T_TOK));
   }
 
   // Null required pointers.
   EXPECT_FALSE(callWith(
-      images.data(), N_IMAGES, IMAGE_SIZE, IMAGE_SIZE, /*state=*/nullptr,
-      STATE_DIM, tokens.data(), langMask, T_TOK));
+      images.data(),
+      N_IMAGES,
+      IMAGE_SIZE,
+      IMAGE_SIZE,
+      /*state=*/nullptr,
+      STATE_DIM,
+      tokens.data(),
+      langMask,
+      T_TOK));
   EXPECT_FALSE(callWith(
-      /*images=*/nullptr, N_IMAGES, IMAGE_SIZE, IMAGE_SIZE, state.data(),
-      STATE_DIM, tokens.data(), langMask, T_TOK));
+      /*images=*/nullptr,
+      N_IMAGES,
+      IMAGE_SIZE,
+      IMAGE_SIZE,
+      state.data(),
+      STATE_DIM,
+      tokens.data(),
+      langMask,
+      T_TOK));
 
   // A per-image null pointer inside an otherwise-valid array.
   {
     std::vector<const float*> badImgs = images;
     badImgs[1] = nullptr;
     EXPECT_FALSE(callWith(
-        badImgs.data(), N_IMAGES, IMAGE_SIZE, IMAGE_SIZE, state.data(),
-        STATE_DIM, tokens.data(), langMask, T_TOK));
+        badImgs.data(),
+        N_IMAGES,
+        IMAGE_SIZE,
+        IMAGE_SIZE,
+        state.data(),
+        STATE_DIM,
+        tokens.data(),
+        langMask,
+        T_TOK));
   }
 
   // All rejections must leave nActionsOut untouched (never written on the

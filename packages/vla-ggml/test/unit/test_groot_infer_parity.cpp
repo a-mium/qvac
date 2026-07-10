@@ -3,13 +3,14 @@
 // GrootModel::infer() with the oracle's REAL tokenized prompt (inputIds +
 // attention_mask from the v4 dump) and diffs the action sample vs PyTorch.
 //
-// infer() returns the flow-matching sample in NORMALIZED action space ([132,40])
-// after all 4 Euler steps; unnormalization is consumer-side (Gr00tPolicy), so we
-// compare in normalized space. The oracle never hooks the final post-loop x_4, so
-// we reconstruct it: x_4 = x_3 + dt·vel_3 (dt=1/4), where x_3 is the last action-
-// encoder input and vel_3 is the last decoded velocity (action_decoder_output.
-// call3) with its leading state token dropped — pred is [41,132]; row 0 is state,
-// rows 1..40 are the actions (mirrors infer()'s ggml_view_2d(pred, …, nb[1])).
+// infer() returns the flow-matching sample in NORMALIZED action space
+// ([132,40]) after all 4 Euler steps; unnormalization is consumer-side
+// (Gr00tPolicy), so we compare in normalized space. The oracle never hooks the
+// final post-loop x_4, so we reconstruct it: x_4 = x_3 + dt·vel_3 (dt=1/4),
+// where x_3 is the last action- encoder input and vel_3 is the last decoded
+// velocity (action_decoder_output. call3) with its leading state token dropped
+// — pred is [41,132]; row 0 is state, rows 1..40 are the actions (mirrors
+// infer()'s ggml_view_2d(pred, …, nb[1])).
 
 #include <cmath>
 #include <cstdint>
@@ -28,7 +29,7 @@ using qvac_lib_infer_vla_ggml::VlaTimingGeneric;
 
 namespace {
 
-constexpr int N_IMAGES = 4;    // 2 cameras × 2 frames
+constexpr int N_IMAGES = 4; // 2 cameras × 2 frames
 constexpr int PATCHES_PER_IMG = 256;
 constexpr int IN_FLAT = 1536;
 constexpr int T_TOK = 280;
@@ -76,14 +77,14 @@ TEST(GrootInferParity, FinalActionSampleMatchesPytorch) {
   ASSERT_NO_THROW(act.open(actPath));
 
   // Real patchified images [1024,1536] → 4 contiguous camera slices.
-  const std::vector<float> patches =
-      act.readF32("vision_input.call0.args.0");
-  ASSERT_EQ(patches.size(),
-            static_cast<size_t>(N_IMAGES) * PATCHES_PER_IMG * IN_FLAT);
+  const std::vector<float> patches = act.readF32("vision_input.call0.args.0");
+  ASSERT_EQ(
+      patches.size(),
+      static_cast<size_t>(N_IMAGES) * PATCHES_PER_IMG * IN_FLAT);
   std::vector<const float*> images(N_IMAGES);
   for (int i = 0; i < N_IMAGES; ++i) {
-    images[i] = patches.data() +
-                static_cast<size_t>(i) * PATCHES_PER_IMG * IN_FLAT;
+    images[i] =
+        patches.data() + static_cast<size_t>(i) * PATCHES_PER_IMG * IN_FLAT;
   }
 
   // Real normalized state and sampled noise (x_0 entering Euler step 0).
@@ -121,9 +122,19 @@ TEST(GrootInferParity, FinalActionSampleMatchesPytorch) {
   VlaTimingGeneric timing{};
 
   const bool ok = model.infer(
-      images.data(), N_IMAGES, /*imgWidth=*/256, /*imgHeight=*/256,
-      state.data(), STATE_DIM, tokens.data(), langMaskPtr, T_TOK, noise.data(),
-      actionsOut.data(), &nActionsOut, &timing);
+      images.data(),
+      N_IMAGES,
+      /*imgWidth=*/256,
+      /*imgHeight=*/256,
+      state.data(),
+      STATE_DIM,
+      tokens.data(),
+      langMaskPtr,
+      T_TOK,
+      noise.data(),
+      actionsOut.data(),
+      &nActionsOut,
+      &timing);
 
   ASSERT_TRUE(ok);
   ASSERT_EQ(nActionsOut, N_ACT);
@@ -146,17 +157,17 @@ TEST(GrootInferParity, FinalActionSampleMatchesPytorch) {
     oracleFinal[i] = x3[i] + dt * dec3[ACT_DIM + i];
   }
 
-  const float cos = cosineSim(actionsOut.data(), oracleFinal.data(),
-                              oracleFinal.size());
-  const float rel = relMaxDiff(actionsOut.data(), oracleFinal.data(),
-                               oracleFinal.size());
+  const float cos =
+      cosineSim(actionsOut.data(), oracleFinal.data(), oracleFinal.size());
+  const float rel =
+      relMaxDiff(actionsOut.data(), oracleFinal.data(), oracleFinal.size());
   std::cerr << "[GrootInferParity] final action sample cos=" << cos
             << " rel=" << rel << "\n";
 
   // End-to-end through the real public pipeline fed the real tokens: infer()'s
-  // vl/state features carry the vision tower's ~1% bf16 drift (see M4.6), so the
-  // final-sample tolerance matches M4.6's full-pipeline Euler gate rather than
-  // the tighter oracle-fed M4.4. Cosine is the strict structural gate.
+  // vl/state features carry the vision tower's ~1% bf16 drift (see M4.6), so
+  // the final-sample tolerance matches M4.6's full-pipeline Euler gate rather
+  // than the tighter oracle-fed M4.4. Cosine is the strict structural gate.
   EXPECT_GT(cos, 0.9995f);
   EXPECT_LT(rel, 0.05f);
   EXPECT_GT(timing.total_ms, 0.0);

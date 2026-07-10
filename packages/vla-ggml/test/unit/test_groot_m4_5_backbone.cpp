@@ -1,6 +1,7 @@
-// M4.5 backbone composition parity: vision tower → merge → 16-layer text decoder
-// vs backbone_output.backbone_features, using MY vision output spliced into the
-// oracle text seq (raw input_ids aren't dumped, so text-token embeds are oracle's).
+// M4.5 backbone composition parity: vision tower → merge → 16-layer text
+// decoder vs backbone_output.backbone_features, using MY vision output spliced
+// into the oracle text seq (raw input_ids aren't dumped, so text-token embeds
+// are oracle's).
 
 #include <cmath>
 #include <cstdint>
@@ -75,23 +76,23 @@ struct ggml_tensor* gt(struct ggml_context* c, const std::string& n) {
 } // namespace
 
 TEST(GrootM4_5, BackboneCompositionMatchesPytorch) {
-  const char* gguf_path = envOrNull("GROOT_TEST_GGUF");
-  const char* act_path = envOrNull("GROOT_TEST_ACTIVATIONS_V3");
-  if (gguf_path == nullptr || act_path == nullptr) {
+  const char* ggufPath = envOrNull("GROOT_TEST_GGUF");
+  const char* actPath = envOrNull("GROOT_TEST_ACTIVATIONS_V3");
+  if (ggufPath == nullptr || actPath == nullptr) {
     GTEST_SKIP() << "Set GROOT_TEST_GGUF and GROOT_TEST_ACTIVATIONS_V3 to run "
                     "the M4.5 backbone-composition test.";
   }
 
   qvac_vla_safetensors_lite::Reader act;
-  ASSERT_NO_THROW(act.open(act_path));
+  ASSERT_NO_THROW(act.open(actPath));
 
-  struct ggml_context* ctx_w = nullptr;
+  struct ggml_context* ctxW = nullptr;
   struct gguf_init_params gp{};
   gp.no_alloc = false;
-  gp.ctx = &ctx_w;
-  struct gguf_context* gguf = gguf_init_from_file(gguf_path, gp);
+  gp.ctx = &ctxW;
+  struct gguf_context* gguf = gguf_init_from_file(ggufPath, gp);
   ASSERT_NE(gguf, nullptr);
-  ASSERT_NE(ctx_w, nullptr);
+  ASSERT_NE(ctxW, nullptr);
 
   using namespace qvac_lib_infer_vla_ggml;
 
@@ -104,47 +105,48 @@ TEST(GrootM4_5, BackboneCompositionMatchesPytorch) {
   std::vector<std::vector<float>> myDeepstack(3);
   {
     GrootVisionWeights vw{};
-    vw.patch_embd_w = gt(ctx_w, "v.patch_embd.weight");
-    vw.patch_embd_w1 = gt(ctx_w, "v.patch_embd.weight.1");
-    vw.patch_embd_b = gt(ctx_w, "v.patch_embd.bias");
-    vw.position_embd = gt(ctx_w, "v.position_embd.weight");
-    vw.post_ln_w = gt(ctx_w, "v.post_ln.weight");
-    vw.post_ln_b = gt(ctx_w, "v.post_ln.bias");
-    vw.mm_0_w = gt(ctx_w, "mm.0.weight");
-    vw.mm_0_b = gt(ctx_w, "mm.0.bias");
-    vw.mm_2_w = gt(ctx_w, "mm.2.weight");
-    vw.mm_2_b = gt(ctx_w, "mm.2.bias");
+    vw.patch_embd_w = gt(ctxW, "v.patch_embd.weight");
+    vw.patch_embd_w1 = gt(ctxW, "v.patch_embd.weight.1");
+    vw.patch_embd_b = gt(ctxW, "v.patch_embd.bias");
+    vw.position_embd = gt(ctxW, "v.position_embd.weight");
+    vw.post_ln_w = gt(ctxW, "v.post_ln.weight");
+    vw.post_ln_b = gt(ctxW, "v.post_ln.bias");
+    vw.mm_0_w = gt(ctxW, "mm.0.weight");
+    vw.mm_0_b = gt(ctxW, "mm.0.bias");
+    vw.mm_2_w = gt(ctxW, "mm.2.weight");
+    vw.mm_2_b = gt(ctxW, "mm.2.bias");
     vw.blocks.resize(24);
     for (int i = 0; i < 24; ++i) {
       const std::string b = "v.blk." + std::to_string(i);
       auto& bw = vw.blocks[i];
-      bw.ln1_w = gt(ctx_w, b + ".ln1.weight");
-      bw.ln1_b = gt(ctx_w, b + ".ln1.bias");
-      bw.attn_qkv_w = gt(ctx_w, b + ".attn_qkv.weight");
-      bw.attn_qkv_b = gt(ctx_w, b + ".attn_qkv.bias");
-      bw.attn_out_w = gt(ctx_w, b + ".attn_out.weight");
-      bw.attn_out_b = gt(ctx_w, b + ".attn_out.bias");
-      bw.ln2_w = gt(ctx_w, b + ".ln2.weight");
-      bw.ln2_b = gt(ctx_w, b + ".ln2.bias");
-      bw.ffn_up_w = gt(ctx_w, b + ".ffn_up.weight");
-      bw.ffn_up_b = gt(ctx_w, b + ".ffn_up.bias");
-      bw.ffn_down_w = gt(ctx_w, b + ".ffn_down.weight");
-      bw.ffn_down_b = gt(ctx_w, b + ".ffn_down.bias");
+      bw.ln1_w = gt(ctxW, b + ".ln1.weight");
+      bw.ln1_b = gt(ctxW, b + ".ln1.bias");
+      bw.attn_qkv_w = gt(ctxW, b + ".attn_qkv.weight");
+      bw.attn_qkv_b = gt(ctxW, b + ".attn_qkv.bias");
+      bw.attn_out_w = gt(ctxW, b + ".attn_out.weight");
+      bw.attn_out_b = gt(ctxW, b + ".attn_out.bias");
+      bw.ln2_w = gt(ctxW, b + ".ln2.weight");
+      bw.ln2_b = gt(ctxW, b + ".ln2.bias");
+      bw.ffn_up_w = gt(ctxW, b + ".ffn_up.weight");
+      bw.ffn_up_b = gt(ctxW, b + ".ffn_up.bias");
+      bw.ffn_down_w = gt(ctxW, b + ".ffn_down.weight");
+      bw.ffn_down_b = gt(ctxW, b + ".ffn_down.bias");
     }
-    const std::vector<int> ds_idx = {5, 11, 17};
+    const std::vector<int> dsIdx = {5, 11, 17};
     vw.deepstack_mergers.resize(3);
     for (size_t i = 0; i < 3; ++i) {
-      const std::string b = "v.deepstack." + std::to_string(ds_idx[i]);
+      const std::string b = "v.deepstack." + std::to_string(dsIdx[i]);
       auto& dm = vw.deepstack_mergers[i];
-      dm.norm_w = gt(ctx_w, b + ".norm.weight");
-      dm.norm_b = gt(ctx_w, b + ".norm.bias");
-      dm.fc1_w = gt(ctx_w, b + ".fc1.weight");
-      dm.fc1_b = gt(ctx_w, b + ".fc1.bias");
-      dm.fc2_w = gt(ctx_w, b + ".fc2.weight");
-      dm.fc2_b = gt(ctx_w, b + ".fc2.bias");
+      dm.norm_w = gt(ctxW, b + ".norm.weight");
+      dm.norm_b = gt(ctxW, b + ".norm.bias");
+      dm.fc1_w = gt(ctxW, b + ".fc1.weight");
+      dm.fc1_b = gt(ctxW, b + ".fc1.bias");
+      dm.fc2_w = gt(ctxW, b + ".fc2.weight");
+      dm.fc2_b = gt(ctxW, b + ".fc2.bias");
     }
 
-    const std::vector<float> patchesv = act.readF32("vision_input.call0.args.0");
+    const std::vector<float> patchesv =
+        act.readF32("vision_input.call0.args.0");
     ASSERT_EQ(patchesv.size(), size_t(N_POS) * IN_FLAT);
 
     const size_t mem = size_t(8) * 1024u * 1024u * 1024u;
@@ -157,8 +159,8 @@ TEST(GrootM4_5, BackboneCompositionMatchesPytorch) {
         c, vw.patch_embd_w, vw.patch_embd_w1, V_EMBD, 3, 2, GRID);
     struct ggml_tensor* patchInput =
         ggml_new_tensor_2d(c, GGML_TYPE_F32, IN_FLAT, N_POS);
-    std::memcpy(patchInput->data, patchesv.data(),
-                patchesv.size() * sizeof(float));
+    std::memcpy(
+        patchInput->data, patchesv.data(), patchesv.size() * sizeof(float));
 
     std::vector<int32_t> sH(GRID * GRID), sW(GRID * GRID);
     int ptr = 0;
@@ -180,7 +182,8 @@ TEST(GrootM4_5, BackboneCompositionMatchesPytorch) {
       pp[2 * N_POS + p] = sH[loc];
       pp[3 * N_POS + p] = sW[loc];
     }
-    struct ggml_tensor* mask = ggml_new_tensor_2d(c, GGML_TYPE_F32, N_POS, N_POS);
+    struct ggml_tensor* mask =
+        ggml_new_tensor_2d(c, GGML_TYPE_F32, N_POS, N_POS);
     auto* mp = static_cast<float*>(mask->data);
     for (int q = 0; q < N_POS; ++q)
       for (int s = 0; s < N_POS; ++s)
@@ -189,53 +192,74 @@ TEST(GrootM4_5, BackboneCompositionMatchesPytorch) {
 
     std::vector<struct ggml_tensor*> deepstack;
     struct ggml_tensor* vout = grootBuildVisionGraph(
-        c, patchInput, wlin, vw.patch_embd_b, vw.position_embd, positions, mask,
-        vw, N_IMAGES, GRID, GRID, V_EMBD, V_HEAD, V_HEAD_DIM, MERGE, NUM_POS_EMBD,
-        OUT_HIDDEN, V_EPS, V_ROPE_BASE, ds_idx, &deepstack);
+        c,
+        patchInput,
+        wlin,
+        vw.patch_embd_b,
+        vw.position_embd,
+        positions,
+        mask,
+        vw,
+        N_IMAGES,
+        GRID,
+        GRID,
+        V_EMBD,
+        V_HEAD,
+        V_HEAD_DIM,
+        MERGE,
+        NUM_POS_EMBD,
+        OUT_HIDDEN,
+        V_EPS,
+        V_ROPE_BASE,
+        dsIdx,
+        &deepstack);
     ASSERT_NE(vout, nullptr);
     ASSERT_EQ(deepstack.size(), size_t(3));
 
     struct ggml_cgraph* gf = ggml_new_graph_custom(c, 16384, false);
     ggml_build_forward_expand(gf, vout);
-    for (auto* d : deepstack) ggml_build_forward_expand(gf, d);
+    for (auto* d : deepstack)
+      ggml_build_forward_expand(gf, d);
     ASSERT_EQ(pi05_test::computeGraphCpu(gf), GGML_STATUS_SUCCESS);
 
     std::memcpy(myVision.data(), vout->data, myVision.size() * sizeof(float));
     for (int i = 0; i < 3; ++i) {
       myDeepstack[i].resize(size_t(N_MERGED) * OUT_HIDDEN);
-      std::memcpy(myDeepstack[i].data(), deepstack[i]->data,
-                  myDeepstack[i].size() * sizeof(float));
+      std::memcpy(
+          myDeepstack[i].data(),
+          deepstack[i]->data,
+          myDeepstack[i].size() * sizeof(float));
     }
     ggml_free(c);
   }
 
   // ── Phase 2: merge into text sequence + text decoder ───────────────────
   GrootTextWeights tw{};
-  tw.token_embd_w = gt(ctx_w, "token_embd.weight");
-  tw.output_norm_w = gt(ctx_w, "output_norm.weight");
+  tw.token_embd_w = gt(ctxW, "token_embd.weight");
+  tw.output_norm_w = gt(ctxW, "output_norm.weight");
   tw.blocks.resize(N_LAYERS);
   for (int i = 0; i < N_LAYERS; ++i) {
     const std::string b = "blk." + std::to_string(i);
     auto& bw = tw.blocks[i];
-    bw.attn_norm_w = gt(ctx_w, b + ".attn_norm.weight");
-    bw.attn_q_w = gt(ctx_w, b + ".attn_q.weight");
-    bw.attn_k_w = gt(ctx_w, b + ".attn_k.weight");
-    bw.attn_v_w = gt(ctx_w, b + ".attn_v.weight");
-    bw.attn_output_w = gt(ctx_w, b + ".attn_output.weight");
-    bw.attn_q_norm_w = gt(ctx_w, b + ".attn_q_norm.weight");
-    bw.attn_k_norm_w = gt(ctx_w, b + ".attn_k_norm.weight");
-    bw.ffn_norm_w = gt(ctx_w, b + ".ffn_norm.weight");
-    bw.ffn_gate_w = gt(ctx_w, b + ".ffn_gate.weight");
-    bw.ffn_up_w = gt(ctx_w, b + ".ffn_up.weight");
-    bw.ffn_down_w = gt(ctx_w, b + ".ffn_down.weight");
+    bw.attn_norm_w = gt(ctxW, b + ".attn_norm.weight");
+    bw.attn_q_w = gt(ctxW, b + ".attn_q.weight");
+    bw.attn_k_w = gt(ctxW, b + ".attn_k.weight");
+    bw.attn_v_w = gt(ctxW, b + ".attn_v.weight");
+    bw.attn_output_w = gt(ctxW, b + ".attn_output.weight");
+    bw.attn_q_norm_w = gt(ctxW, b + ".attn_q_norm.weight");
+    bw.attn_k_norm_w = gt(ctxW, b + ".attn_k_norm.weight");
+    bw.ffn_norm_w = gt(ctxW, b + ".ffn_norm.weight");
+    bw.ffn_gate_w = gt(ctxW, b + ".ffn_gate.weight");
+    bw.ffn_up_w = gt(ctxW, b + ".ffn_up.weight");
+    bw.ffn_down_w = gt(ctxW, b + ".ffn_down.weight");
   }
 
   // Start from the oracle inputs_embeds (text-token embeds we can't reproduce
-  // without input_ids), then overwrite the image positions with MY vision embeds
-  // and validate those rows match — the composition point under test.
+  // without input_ids), then overwrite the image positions with MY vision
+  // embeds and validate those rows match — the composition point under test.
   std::vector<float> embeds =
       act.readF32("text_model_input.call0.kwargs.inputs_embeds");
-  const std::vector<float> pos_ids =
+  const std::vector<float> posIds =
       act.readF32("text_model_input.call0.kwargs.position_ids");
   const std::vector<float> expected =
       act.readF32("backbone_output.backbone_features");
@@ -274,12 +298,14 @@ TEST(GrootM4_5, BackboneCompositionMatchesPytorch) {
   struct ggml_tensor* inpE = ggml_new_tensor_2d(c, GGML_TYPE_F32, DIM, T_TOK);
   std::memcpy(inpE->data, embeds.data(), embeds.size() * sizeof(float));
 
-  struct ggml_tensor* positions = ggml_new_tensor_1d(c, GGML_TYPE_I32, T_TOK * 4);
+  struct ggml_tensor* positions =
+      ggml_new_tensor_1d(c, GGML_TYPE_I32, T_TOK * 4);
   auto* pp = static_cast<int32_t*>(positions->data);
   for (int ax = 0; ax < 3; ++ax)
     for (int t = 0; t < T_TOK; ++t)
-      pp[ax * T_TOK + t] = static_cast<int32_t>(pos_ids[ax * T_TOK + t]);
-  for (int t = 0; t < T_TOK; ++t) pp[3 * T_TOK + t] = 0;
+      pp[ax * T_TOK + t] = static_cast<int32_t>(posIds[ax * T_TOK + t]);
+  for (int t = 0; t < T_TOK; ++t)
+    pp[3 * T_TOK + t] = 0;
 
   struct ggml_tensor* mask = ggml_new_tensor_2d(c, GGML_TYPE_F32, T_TOK, T_TOK);
   auto* mp = static_cast<float*>(mask->data);
@@ -295,8 +321,10 @@ TEST(GrootM4_5, BackboneCompositionMatchesPytorch) {
     int img = 0;
     for (int t = 0; t < T_TOK; ++t) {
       if (vpm[t] > 0.5f) {
-        std::memcpy(&dp[size_t(t) * DIM], &myDeepstack[i][size_t(img) * DIM],
-                    DIM * sizeof(float));
+        std::memcpy(
+            &dp[size_t(t) * DIM],
+            &myDeepstack[i][size_t(img) * DIM],
+            DIM * sizeof(float));
         ++img;
       }
     }
@@ -305,8 +333,21 @@ TEST(GrootM4_5, BackboneCompositionMatchesPytorch) {
 
   const int sections[4] = {24, 20, 20, 0};
   struct ggml_tensor* out = grootBuildTextDecoderGraph(
-      c, inpE, positions, mask, deepstack, tw, N_LAYERS, T_TOK, N_HEAD,
-      N_HEAD_KV, HEAD_DIM, FFN_LEN, ROPE_FREQ_BASE, sections, RMS_EPS);
+      c,
+      inpE,
+      positions,
+      mask,
+      deepstack,
+      tw,
+      N_LAYERS,
+      T_TOK,
+      N_HEAD,
+      N_HEAD_KV,
+      HEAD_DIM,
+      FFN_LEN,
+      ROPE_FREQ_BASE,
+      sections,
+      RMS_EPS);
   ASSERT_NE(out, nullptr);
 
   struct ggml_cgraph* gf = ggml_new_graph_custom(c, 8192, false);
@@ -324,5 +365,5 @@ TEST(GrootM4_5, BackboneCompositionMatchesPytorch) {
 
   ggml_free(c);
   gguf_free(gguf);
-  ggml_free(ctx_w);
+  ggml_free(ctxW);
 }

@@ -31,13 +31,15 @@ TEST(GrootLoad, LoadsRealCheckpointAndPopulatesHparams) {
   GrootModel model(ggufPath, /*forceCpu=*/true, /*backendsDir=*/"");
 
   const VlaHparamsGeneric& hp = model.hparams();
-  EXPECT_EQ(hp.chunk_size, 40);       // action_horizon
-  EXPECT_EQ(hp.action_dim, 132);      // max_action_dim (padded; real DoF is smaller per-embodiment)
+  EXPECT_EQ(hp.chunk_size, 40); // action_horizon
+  EXPECT_EQ(
+      hp.action_dim,
+      132); // max_action_dim (padded; real DoF is smaller per-embodiment)
   EXPECT_EQ(hp.max_action_dim, 132);
   EXPECT_EQ(hp.max_state_dim, 132);
-  EXPECT_EQ(hp.num_cameras, 2);       // OXE_DROID: exterior_image_1_left + wrist_image_left
   EXPECT_EQ(
-      hp.state_input_mode, VlaHparamsGeneric::StateInputMode::Continuous);
+      hp.num_cameras, 2); // OXE_DROID: exterior_image_1_left + wrist_image_left
+  EXPECT_EQ(hp.state_input_mode, VlaHparamsGeneric::StateInputMode::Continuous);
 
   EXPECT_EQ(model.backendName(), "CPU");
   EXPECT_FALSE(model.hasGpu());

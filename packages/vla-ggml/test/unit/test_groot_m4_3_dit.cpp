@@ -74,49 +74,49 @@ struct ggml_tensor* feed2d(
 } // namespace
 
 TEST(GrootM4_3, DitMatchesPytorch) {
-  const char* gguf_path = envOrNull("GROOT_TEST_GGUF");
-  const char* act_path = envOrNull("GROOT_TEST_ACTIVATIONS_V2");
-  if (gguf_path == nullptr || act_path == nullptr) {
+  const char* ggufPath = envOrNull("GROOT_TEST_GGUF");
+  const char* actPath = envOrNull("GROOT_TEST_ACTIVATIONS_V2");
+  if (ggufPath == nullptr || actPath == nullptr) {
     GTEST_SKIP() << "Set GROOT_TEST_GGUF and GROOT_TEST_ACTIVATIONS_V2 to run "
                     "the M4.3 DiT parity test.";
   }
 
   qvac_vla_safetensors_lite::Reader act;
-  ASSERT_NO_THROW(act.open(act_path));
+  ASSERT_NO_THROW(act.open(actPath));
 
-  struct ggml_context* ctx_w = nullptr;
+  struct ggml_context* ctxW = nullptr;
   struct gguf_init_params gp{};
   gp.no_alloc = false;
-  gp.ctx = &ctx_w;
-  struct gguf_context* gguf = gguf_init_from_file(gguf_path, gp);
+  gp.ctx = &ctxW;
+  struct gguf_context* gguf = gguf_init_from_file(ggufPath, gp);
   ASSERT_NE(gguf, nullptr);
-  ASSERT_NE(ctx_w, nullptr);
+  ASSERT_NE(ctxW, nullptr);
 
   // ── DiT weights ───────────────────────────────────────────────────────
   qvac_lib_infer_vla_ggml::GrootDitWeights w{};
-  w.proj_out_1_w = g(ctx_w, "dit.proj_out_1.weight");
-  w.proj_out_1_b = g(ctx_w, "dit.proj_out_1.bias");
-  w.proj_out_2_w = g(ctx_w, "dit.proj_out_2.weight");
-  w.proj_out_2_b = g(ctx_w, "dit.proj_out_2.bias");
+  w.proj_out_1_w = g(ctxW, "dit.proj_out_1.weight");
+  w.proj_out_1_b = g(ctxW, "dit.proj_out_1.bias");
+  w.proj_out_2_w = g(ctxW, "dit.proj_out_2.weight");
+  w.proj_out_2_b = g(ctxW, "dit.proj_out_2.bias");
   ASSERT_NE(w.proj_out_2_b, nullptr);
   w.blocks.resize(N_LAYERS);
   for (int i = 0; i < N_LAYERS; ++i) {
     const std::string b = "dit.blk." + std::to_string(i);
     auto& bw = w.blocks[i];
-    bw.norm1_linear_w = g(ctx_w, b + ".norm1_linear.weight");
-    bw.norm1_linear_b = g(ctx_w, b + ".norm1_linear.bias");
-    bw.attn_q_w = g(ctx_w, b + ".attn_q.weight");
-    bw.attn_q_b = g(ctx_w, b + ".attn_q.bias");
-    bw.attn_k_w = g(ctx_w, b + ".attn_k.weight");
-    bw.attn_k_b = g(ctx_w, b + ".attn_k.bias");
-    bw.attn_v_w = g(ctx_w, b + ".attn_v.weight");
-    bw.attn_v_b = g(ctx_w, b + ".attn_v.bias");
-    bw.attn_out_w = g(ctx_w, b + ".attn_out.weight");
-    bw.attn_out_b = g(ctx_w, b + ".attn_out.bias");
-    bw.ffn_in_w = g(ctx_w, b + ".ffn_in.weight");
-    bw.ffn_in_b = g(ctx_w, b + ".ffn_in.bias");
-    bw.ffn_out_w = g(ctx_w, b + ".ffn_out.weight");
-    bw.ffn_out_b = g(ctx_w, b + ".ffn_out.bias");
+    bw.norm1_linear_w = g(ctxW, b + ".norm1_linear.weight");
+    bw.norm1_linear_b = g(ctxW, b + ".norm1_linear.bias");
+    bw.attn_q_w = g(ctxW, b + ".attn_q.weight");
+    bw.attn_q_b = g(ctxW, b + ".attn_q.bias");
+    bw.attn_k_w = g(ctxW, b + ".attn_k.weight");
+    bw.attn_k_b = g(ctxW, b + ".attn_k.bias");
+    bw.attn_v_w = g(ctxW, b + ".attn_v.weight");
+    bw.attn_v_b = g(ctxW, b + ".attn_v.bias");
+    bw.attn_out_w = g(ctxW, b + ".attn_out.weight");
+    bw.attn_out_b = g(ctxW, b + ".attn_out.bias");
+    bw.ffn_in_w = g(ctxW, b + ".ffn_in.weight");
+    bw.ffn_in_b = g(ctxW, b + ".ffn_in.bias");
+    bw.ffn_out_w = g(ctxW, b + ".ffn_out.weight");
+    bw.ffn_out_b = g(ctxW, b + ".ffn_out.bias");
     ASSERT_NE(bw.ffn_out_b, nullptr) << b;
   }
 
@@ -130,17 +130,19 @@ TEST(GrootM4_3, DitMatchesPytorch) {
   struct ggml_tensor* hidden = feed2d(
       c, act.readF32("dit_model_input.call0.kwargs.hidden_states"), DIM, T_TOK);
   struct ggml_tensor* encoder = feed2d(
-      c, act.readF32("dit_model_input.call0.kwargs.encoder_hidden_states"),
-      CROSS_DIM, S_TOK);
-  const std::vector<float> temb_v = act.readF32("timestep_encoder_output.call0");
+      c,
+      act.readF32("dit_model_input.call0.kwargs.encoder_hidden_states"),
+      CROSS_DIM,
+      S_TOK);
+  const std::vector<float> tembV = act.readF32("timestep_encoder_output.call0");
   struct ggml_tensor* temb = ggml_new_tensor_1d(c, GGML_TYPE_F32, DIM);
-  std::memcpy(temb->data, temb_v.data(), temb_v.size() * sizeof(float));
+  std::memcpy(temb->data, tembV.data(), tembV.size() * sizeof(float));
 
   // Additive key-masks [S, T]: 0 to attend, −inf to block. backbone_mask is
   // all-ones for this fixture; image tokens vs text tokens split by image_mask.
-  const std::vector<float> image_mask =
+  const std::vector<float> imageMask =
       act.readF32("dit_model_input.call0.kwargs.image_mask");
-  const std::vector<float> bb_mask =
+  const std::vector<float> bbMask =
       act.readF32("dit_model_input.call0.kwargs.backbone_attention_mask");
   struct ggml_tensor* imageKeyMask =
       ggml_new_tensor_2d(c, GGML_TYPE_F32, S_TOK, T_TOK);
@@ -150,8 +152,8 @@ TEST(GrootM4_3, DitMatchesPytorch) {
   auto* tm = static_cast<float*>(textKeyMask->data);
   for (int t = 0; t < T_TOK; ++t) {
     for (int s = 0; s < S_TOK; ++s) {
-      const bool valid = bb_mask[s] > 0.5f;
-      const bool isImg = image_mask[s] > 0.5f;
+      const bool valid = bbMask[s] > 0.5f;
+      const bool isImg = imageMask[s] > 0.5f;
       im[t * S_TOK + s] = (valid && isImg) ? 0.0f : -INFINITY;
       tm[t * S_TOK + s] = (valid && !isImg) ? 0.0f : -INFINITY;
     }
@@ -160,9 +162,23 @@ TEST(GrootM4_3, DitMatchesPytorch) {
   // ── Build + run ─────────────────────────────────────────────────────────
   std::vector<struct ggml_tensor*> blocks;
   struct ggml_tensor* out = qvac_lib_infer_vla_ggml::grootBuildDitGraph(
-      c, hidden, temb, encoder, imageKeyMask, textKeyMask, w, N_LAYERS, N_HEADS,
-      HEAD_DIM, DIM, CROSS_DIM, FFN_INNER, OUTPUT_DIM, ATTEND_TEXT_EVERY_N,
-      /*eps=*/1e-5f, &blocks);
+      c,
+      hidden,
+      temb,
+      encoder,
+      imageKeyMask,
+      textKeyMask,
+      w,
+      N_LAYERS,
+      N_HEADS,
+      HEAD_DIM,
+      DIM,
+      CROSS_DIM,
+      FFN_INNER,
+      OUTPUT_DIM,
+      ATTEND_TEXT_EVERY_N,
+      /*eps=*/1e-5f,
+      &blocks);
   ASSERT_NE(out, nullptr);
   ASSERT_EQ(static_cast<int>(blocks.size()), N_LAYERS);
 
@@ -174,35 +190,35 @@ TEST(GrootM4_3, DitMatchesPytorch) {
   ASSERT_EQ(pi05_test::computeGraphCpu(gf), GGML_STATUS_SUCCESS);
 
   // ── Compare each block output + the head ──────────────────────────────
-  int worst_block = -1;
-  float worst_cos = 1.0f;
+  int worstBlock = -1;
+  float worstCos = 1.0f;
   for (int i = 0; i < N_LAYERS; ++i) {
     const std::vector<float> exp =
         act.readF32("dit_block_" + std::to_string(i) + "_output.call0");
     const float* got = static_cast<const float*>(blocks[i]->data);
     const float cos = cosineSim(got, exp.data(), exp.size());
     const float rel = relMaxDiff(got, exp.data(), exp.size());
-    if (cos < worst_cos) {
-      worst_cos = cos;
-      worst_block = i;
+    if (cos < worstCos) {
+      worstCos = cos;
+      worstBlock = i;
     }
     EXPECT_GT(cos, 0.9995f) << "dit_block_" << i;
     EXPECT_LT(rel, 0.015f) << "dit_block_" << i;
   }
-  std::cerr << "[M4.3] worst block cos=" << worst_cos << " @ block "
-            << worst_block << "\n";
+  std::cerr << "[M4.3] worst block cos=" << worstCos << " @ block "
+            << worstBlock << "\n";
 
-  const std::vector<float> exp_out =
+  const std::vector<float> expOut =
       act.readF32("action_decoder_input.call0.args.0");
-  const float* got_out = static_cast<const float*>(out->data);
-  const float cos_out = cosineSim(got_out, exp_out.data(), exp_out.size());
-  const float rel_out = relMaxDiff(got_out, exp_out.data(), exp_out.size());
-  std::cerr << "[M4.3] model_output: cos=" << cos_out << " rel=" << rel_out
+  const float* gotOut = static_cast<const float*>(out->data);
+  const float cosOut = cosineSim(gotOut, expOut.data(), expOut.size());
+  const float relOut = relMaxDiff(gotOut, expOut.data(), expOut.size());
+  std::cerr << "[M4.3] model_output: cos=" << cosOut << " rel=" << relOut
             << "\n";
-  EXPECT_GT(cos_out, 0.9995f);
-  EXPECT_LT(rel_out, 0.015f);
+  EXPECT_GT(cosOut, 0.9995f);
+  EXPECT_LT(relOut, 0.015f);
 
   ggml_free(c);
   gguf_free(gguf);
-  ggml_free(ctx_w);
+  ggml_free(ctxW);
 }

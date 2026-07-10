@@ -49,8 +49,8 @@ struct ggml_tensor* g(struct ggml_context* c, const char* n) {
   return ggml_get_tensor(c, n);
 }
 
-qvac_lib_infer_vla_ggml::GrootLinearWeights linW(
-    struct ggml_context* c, const std::string& prefix) {
+qvac_lib_infer_vla_ggml::GrootLinearWeights
+linW(struct ggml_context* c, const std::string& prefix) {
   return {g(c, (prefix + ".weight").c_str()), g(c, (prefix + ".bias").c_str())};
 }
 
@@ -62,8 +62,7 @@ struct ggml_tensor* feed2d(
   return t;
 }
 
-void check(
-    const char* tag, const float* got, const std::vector<float>& exp) {
+void check(const char* tag, const float* got, const std::vector<float>& exp) {
   const float cos = cosineSim(got, exp.data(), exp.size());
   const float rel = relMaxDiff(got, exp.data(), exp.size());
   std::cerr << "[M4.2] " << tag << ": cos=" << cos << " rel=" << rel << "\n";
@@ -74,23 +73,23 @@ void check(
 } // namespace
 
 TEST(GrootM4_2, EncodersMatchPytorch) {
-  const char* gguf_path = envOrNull("GROOT_TEST_GGUF");
-  const char* act_path = envOrNull("GROOT_TEST_ACTIVATIONS_V2");
-  if (gguf_path == nullptr || act_path == nullptr) {
+  const char* ggufPath = envOrNull("GROOT_TEST_GGUF");
+  const char* actPath = envOrNull("GROOT_TEST_ACTIVATIONS_V2");
+  if (ggufPath == nullptr || actPath == nullptr) {
     GTEST_SKIP() << "Set GROOT_TEST_GGUF and GROOT_TEST_ACTIVATIONS_V2 "
                     "(augmented dump) to run the M4.2 encoder parity test.";
   }
 
   qvac_vla_safetensors_lite::Reader act;
-  ASSERT_NO_THROW(act.open(act_path));
+  ASSERT_NO_THROW(act.open(actPath));
 
-  struct ggml_context* ctx_w = nullptr;
+  struct ggml_context* ctxW = nullptr;
   struct gguf_init_params gp{};
   gp.no_alloc = false;
-  gp.ctx = &ctx_w;
-  struct gguf_context* gguf = gguf_init_from_file(gguf_path, gp);
+  gp.ctx = &ctxW;
+  struct gguf_context* gguf = gguf_init_from_file(ggufPath, gp);
   ASSERT_NE(gguf, nullptr);
-  ASSERT_NE(ctx_w, nullptr);
+  ASSERT_NE(ctxW, nullptr);
 
   const size_t mem = 128u * 1024u * 1024u;
   std::vector<uint8_t> buf(mem);
@@ -103,36 +102,45 @@ TEST(GrootM4_2, EncodersMatchPytorch) {
   // ── 1. Timestep encoder ───────────────────────────────────────────────
   {
     const float t = act.readF32("timestep_encoder_input.call0.args.0").at(0);
-    std::vector<float> proj_buf(256);
-    grootComputeTimestepProj(t, 256, proj_buf.data());
+    std::vector<float> projBuf(256);
+    grootComputeTimestepProj(t, 256, projBuf.data());
     struct ggml_tensor* proj = ggml_new_tensor_1d(c, GGML_TYPE_F32, 256);
-    std::memcpy(proj->data, proj_buf.data(), proj_buf.size() * sizeof(float));
+    std::memcpy(proj->data, projBuf.data(), projBuf.size() * sizeof(float));
     struct ggml_tensor* out = grootBuildTimestepMlpGraph(
-        c, proj, g(ctx_w, "dit.timestep_embedder.linear_1.weight"),
-        g(ctx_w, "dit.timestep_embedder.linear_1.bias"),
-        g(ctx_w, "dit.timestep_embedder.linear_2.weight"),
-        g(ctx_w, "dit.timestep_embedder.linear_2.bias"));
+        c,
+        proj,
+        g(ctxW, "dit.timestep_embedder.linear_1.weight"),
+        g(ctxW, "dit.timestep_embedder.linear_1.bias"),
+        g(ctxW, "dit.timestep_embedder.linear_2.weight"),
+        g(ctxW, "dit.timestep_embedder.linear_2.bias"));
     ASSERT_NE(out, nullptr);
     struct ggml_cgraph* gf = ggml_new_graph(c);
     ggml_build_forward_expand(gf, out);
     ASSERT_EQ(pi05_test::computeGraphCpu(gf), GGML_STATUS_SUCCESS);
-    check("timestep", static_cast<const float*>(out->data),
-          act.readF32("timestep_encoder_output.call0"));
+    check(
+        "timestep",
+        static_cast<const float*>(out->data),
+        act.readF32("timestep_encoder_output.call0"));
   }
 
   // ── 2. State encoder (CategorySpecificMLP, ReLU) ──────────────────────
   {
-    const std::vector<float> in = act.readF32("state_encoder_input.call0.args.0");
+    const std::vector<float> in =
+        act.readF32("state_encoder_input.call0.args.0");
     struct ggml_tensor* x = feed2d(c, in, 132, 1); // [1,1,132] → [132,1]
     struct ggml_tensor* out = grootBuildCategoryMlpGraph(
-        c, x, linW(ctx_w, "embodiment.state_encoder.layer1"),
-        linW(ctx_w, "embodiment.state_encoder.layer2"));
+        c,
+        x,
+        linW(ctxW, "embodiment.state_encoder.layer1"),
+        linW(ctxW, "embodiment.state_encoder.layer2"));
     ASSERT_NE(out, nullptr);
     struct ggml_cgraph* gf = ggml_new_graph(c);
     ggml_build_forward_expand(gf, out);
     ASSERT_EQ(pi05_test::computeGraphCpu(gf), GGML_STATUS_SUCCESS);
-    check("state_encoder", static_cast<const float*>(out->data),
-          act.readF32("state_encoder_output.call0"));
+    check(
+        "state_encoder",
+        static_cast<const float*>(out->data),
+        act.readF32("state_encoder_output.call0"));
   }
 
   // ── 3. Action decoder (CategorySpecificMLP, ReLU) ─────────────────────
@@ -141,14 +149,18 @@ TEST(GrootM4_2, EncodersMatchPytorch) {
         act.readF32("action_decoder_input.call0.args.0");
     struct ggml_tensor* x = feed2d(c, in, 1024, 41); // [1,41,1024] → [1024,41]
     struct ggml_tensor* out = grootBuildCategoryMlpGraph(
-        c, x, linW(ctx_w, "embodiment.action_decoder.layer1"),
-        linW(ctx_w, "embodiment.action_decoder.layer2"));
+        c,
+        x,
+        linW(ctxW, "embodiment.action_decoder.layer1"),
+        linW(ctxW, "embodiment.action_decoder.layer2"));
     ASSERT_NE(out, nullptr);
     struct ggml_cgraph* gf = ggml_new_graph(c);
     ggml_build_forward_expand(gf, out);
     ASSERT_EQ(pi05_test::computeGraphCpu(gf), GGML_STATUS_SUCCESS);
-    check("action_decoder", static_cast<const float*>(out->data),
-          act.readF32("action_decoder_output.call0"));
+    check(
+        "action_decoder",
+        static_cast<const float*>(out->data),
+        act.readF32("action_decoder_output.call0"));
   }
 
   // ── 4. Action encoder (MultiEmbodimentActionEncoder, swish) ───────────
@@ -157,23 +169,30 @@ TEST(GrootM4_2, EncodersMatchPytorch) {
         act.readF32("action_encoder_input.call0.args.0"); // [1,40,132]
     const float t = act.readF32("action_encoder_input.call0.args.1").at(0);
     struct ggml_tensor* actions = feed2d(c, in, 132, 40);
-    std::vector<float> tau_buf(1536);
-    grootComputeActionTauEnc(t, 1536, tau_buf.data());
+    std::vector<float> tauBuf(1536);
+    grootComputeActionTauEnc(t, 1536, tauBuf.data());
     struct ggml_tensor* tau = ggml_new_tensor_1d(c, GGML_TYPE_F32, 1536);
-    std::memcpy(tau->data, tau_buf.data(), tau_buf.size() * sizeof(float));
+    std::memcpy(tau->data, tauBuf.data(), tauBuf.size() * sizeof(float));
     struct ggml_tensor* out = grootBuildActionEncoderGraph(
-        c, actions, tau, linW(ctx_w, "embodiment.action_encoder.w1"),
-        linW(ctx_w, "embodiment.action_encoder.w2"),
-        linW(ctx_w, "embodiment.action_encoder.w3"), 1536, 40);
+        c,
+        actions,
+        tau,
+        linW(ctxW, "embodiment.action_encoder.w1"),
+        linW(ctxW, "embodiment.action_encoder.w2"),
+        linW(ctxW, "embodiment.action_encoder.w3"),
+        1536,
+        40);
     ASSERT_NE(out, nullptr);
     struct ggml_cgraph* gf = ggml_new_graph(c);
     ggml_build_forward_expand(gf, out);
     ASSERT_EQ(pi05_test::computeGraphCpu(gf), GGML_STATUS_SUCCESS);
-    check("action_encoder", static_cast<const float*>(out->data),
-          act.readF32("action_encoder_output.call0"));
+    check(
+        "action_encoder",
+        static_cast<const float*>(out->data),
+        act.readF32("action_encoder_output.call0"));
   }
 
   ggml_free(c);
   gguf_free(gguf);
-  ggml_free(ctx_w);
+  ggml_free(ctxW);
 }

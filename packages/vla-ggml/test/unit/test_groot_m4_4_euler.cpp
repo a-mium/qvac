@@ -69,73 +69,76 @@ struct ggml_tensor* gt(struct ggml_context* c, const std::string& n) {
   return ggml_get_tensor(c, n.c_str());
 }
 
-qvac_lib_infer_vla_ggml::GrootLinearWeights linW(
-    struct ggml_context* c, const std::string& p) {
+qvac_lib_infer_vla_ggml::GrootLinearWeights
+linW(struct ggml_context* c, const std::string& p) {
   return {gt(c, p + ".weight"), gt(c, p + ".bias")};
 }
 
 } // namespace
 
 TEST(GrootM4_4, EulerLoopMatchesPytorch) {
-  const char* gguf_path = envOrNull("GROOT_TEST_GGUF");
-  const char* act_path = envOrNull("GROOT_TEST_ACTIVATIONS_V2");
-  if (gguf_path == nullptr || act_path == nullptr) {
+  const char* ggufPath = envOrNull("GROOT_TEST_GGUF");
+  const char* actPath = envOrNull("GROOT_TEST_ACTIVATIONS_V2");
+  if (ggufPath == nullptr || actPath == nullptr) {
     GTEST_SKIP() << "Set GROOT_TEST_GGUF and GROOT_TEST_ACTIVATIONS_V2 to run "
                     "the M4.4 Euler-loop parity test.";
   }
 
   qvac_vla_safetensors_lite::Reader act;
-  ASSERT_NO_THROW(act.open(act_path));
+  ASSERT_NO_THROW(act.open(actPath));
 
-  struct ggml_context* ctx_w = nullptr;
+  struct ggml_context* ctxW = nullptr;
   struct gguf_init_params gp{};
   gp.no_alloc = false;
-  gp.ctx = &ctx_w;
-  struct gguf_context* gguf = gguf_init_from_file(gguf_path, gp);
+  gp.ctx = &ctxW;
+  struct gguf_context* gguf = gguf_init_from_file(ggufPath, gp);
   ASSERT_NE(gguf, nullptr);
-  ASSERT_NE(ctx_w, nullptr);
+  ASSERT_NE(ctxW, nullptr);
 
   using namespace qvac_lib_infer_vla_ggml;
 
   // ── Weights ────────────────────────────────────────────────────────────
   GrootDitWeights dw{};
-  dw.proj_out_1_w = gt(ctx_w, "dit.proj_out_1.weight");
-  dw.proj_out_1_b = gt(ctx_w, "dit.proj_out_1.bias");
-  dw.proj_out_2_w = gt(ctx_w, "dit.proj_out_2.weight");
-  dw.proj_out_2_b = gt(ctx_w, "dit.proj_out_2.bias");
+  dw.proj_out_1_w = gt(ctxW, "dit.proj_out_1.weight");
+  dw.proj_out_1_b = gt(ctxW, "dit.proj_out_1.bias");
+  dw.proj_out_2_w = gt(ctxW, "dit.proj_out_2.weight");
+  dw.proj_out_2_b = gt(ctxW, "dit.proj_out_2.bias");
   dw.blocks.resize(N_LAYERS);
   for (int i = 0; i < N_LAYERS; ++i) {
     const std::string b = "dit.blk." + std::to_string(i);
     auto& bw = dw.blocks[i];
-    bw.norm1_linear_w = gt(ctx_w, b + ".norm1_linear.weight");
-    bw.norm1_linear_b = gt(ctx_w, b + ".norm1_linear.bias");
-    bw.attn_q_w = gt(ctx_w, b + ".attn_q.weight");
-    bw.attn_q_b = gt(ctx_w, b + ".attn_q.bias");
-    bw.attn_k_w = gt(ctx_w, b + ".attn_k.weight");
-    bw.attn_k_b = gt(ctx_w, b + ".attn_k.bias");
-    bw.attn_v_w = gt(ctx_w, b + ".attn_v.weight");
-    bw.attn_v_b = gt(ctx_w, b + ".attn_v.bias");
-    bw.attn_out_w = gt(ctx_w, b + ".attn_out.weight");
-    bw.attn_out_b = gt(ctx_w, b + ".attn_out.bias");
-    bw.ffn_in_w = gt(ctx_w, b + ".ffn_in.weight");
-    bw.ffn_in_b = gt(ctx_w, b + ".ffn_in.bias");
-    bw.ffn_out_w = gt(ctx_w, b + ".ffn_out.weight");
-    bw.ffn_out_b = gt(ctx_w, b + ".ffn_out.bias");
+    bw.norm1_linear_w = gt(ctxW, b + ".norm1_linear.weight");
+    bw.norm1_linear_b = gt(ctxW, b + ".norm1_linear.bias");
+    bw.attn_q_w = gt(ctxW, b + ".attn_q.weight");
+    bw.attn_q_b = gt(ctxW, b + ".attn_q.bias");
+    bw.attn_k_w = gt(ctxW, b + ".attn_k.weight");
+    bw.attn_k_b = gt(ctxW, b + ".attn_k.bias");
+    bw.attn_v_w = gt(ctxW, b + ".attn_v.weight");
+    bw.attn_v_b = gt(ctxW, b + ".attn_v.bias");
+    bw.attn_out_w = gt(ctxW, b + ".attn_out.weight");
+    bw.attn_out_b = gt(ctxW, b + ".attn_out.bias");
+    bw.ffn_in_w = gt(ctxW, b + ".ffn_in.weight");
+    bw.ffn_in_b = gt(ctxW, b + ".ffn_in.bias");
+    bw.ffn_out_w = gt(ctxW, b + ".ffn_out.weight");
+    bw.ffn_out_b = gt(ctxW, b + ".ffn_out.bias");
   }
-  const GrootLinearWeights aeW1 = linW(ctx_w, "embodiment.action_encoder.w1");
-  const GrootLinearWeights aeW2 = linW(ctx_w, "embodiment.action_encoder.w2");
-  const GrootLinearWeights aeW3 = linW(ctx_w, "embodiment.action_encoder.w3");
-  const GrootLinearWeights dec1 = linW(ctx_w, "embodiment.action_decoder.layer1");
-  const GrootLinearWeights dec2 = linW(ctx_w, "embodiment.action_decoder.layer2");
-  struct ggml_tensor* posEmbedW = gt(ctx_w, "dit.position_embedding.weight");
+  const GrootLinearWeights aeW1 = linW(ctxW, "embodiment.action_encoder.w1");
+  const GrootLinearWeights aeW2 = linW(ctxW, "embodiment.action_encoder.w2");
+  const GrootLinearWeights aeW3 = linW(ctxW, "embodiment.action_encoder.w3");
+  const GrootLinearWeights dec1 =
+      linW(ctxW, "embodiment.action_decoder.layer1");
+  const GrootLinearWeights dec2 =
+      linW(ctxW, "embodiment.action_decoder.layer2");
+  struct ggml_tensor* posEmbedW = gt(ctxW, "dit.position_embedding.weight");
   ASSERT_NE(posEmbedW, nullptr);
 
   // ── Fixed inputs (fed from the oracle) ─────────────────────────────────
-  const std::vector<float> state_feat_v = act.readF32("state_encoder_output.call0");
-  const std::vector<float> vl_v = act.readF32("vl_self_attention_output");
-  const std::vector<float> image_mask =
+  const std::vector<float> stateFeatV =
+      act.readF32("state_encoder_output.call0");
+  const std::vector<float> vlV = act.readF32("vl_self_attention_output");
+  const std::vector<float> imageMask =
       act.readF32("dit_model_input.call0.kwargs.image_mask");
-  const std::vector<float> bb_mask =
+  const std::vector<float> bbMask =
       act.readF32("dit_model_input.call0.kwargs.backbone_attention_mask");
 
   // Mutable action buffer, initialised to the sampled noise (x_t entering
@@ -153,51 +156,57 @@ TEST(GrootM4_4, EulerLoopMatchesPytorch) {
     ASSERT_NE(c, nullptr);
 
     // actions [132,40]
-    struct ggml_tensor* actT = ggml_new_tensor_2d(c, GGML_TYPE_F32, ACT_DIM, N_ACT);
+    struct ggml_tensor* actT =
+        ggml_new_tensor_2d(c, GGML_TYPE_F32, ACT_DIM, N_ACT);
     std::memcpy(actT->data, actions.data(), actions.size() * sizeof(float));
 
     // state_features [1536,1]
-    struct ggml_tensor* stateFeat = ggml_new_tensor_2d(c, GGML_TYPE_F32, DIM, 1);
-    std::memcpy(stateFeat->data, state_feat_v.data(),
-                state_feat_v.size() * sizeof(float));
+    struct ggml_tensor* stateFeat =
+        ggml_new_tensor_2d(c, GGML_TYPE_F32, DIM, 1);
+    std::memcpy(
+        stateFeat->data, stateFeatV.data(), stateFeatV.size() * sizeof(float));
 
     // vl_embeds [2048,280]
-    struct ggml_tensor* vl = ggml_new_tensor_2d(c, GGML_TYPE_F32, CROSS_DIM, S_TOK);
-    std::memcpy(vl->data, vl_v.data(), vl_v.size() * sizeof(float));
+    struct ggml_tensor* vl =
+        ggml_new_tensor_2d(c, GGML_TYPE_F32, CROSS_DIM, S_TOK);
+    std::memcpy(vl->data, vlV.data(), vlV.size() * sizeof(float));
 
     // temb from the oracle (isolates the loop from the timestep encoder).
-    const std::vector<float> temb_v =
+    const std::vector<float> tembV =
         act.readF32("timestep_encoder_output.call" + std::to_string(step));
     struct ggml_tensor* temb = ggml_new_tensor_1d(c, GGML_TYPE_F32, DIM);
-    std::memcpy(temb->data, temb_v.data(), temb_v.size() * sizeof(float));
+    std::memcpy(temb->data, tembV.data(), tembV.size() * sizeof(float));
 
     // tau for the action encoder from this step's integer bucket.
     const float bucket =
-        act.readF32("action_encoder_input.call" + std::to_string(step) + ".args.1")
+        act.readF32(
+               "action_encoder_input.call" + std::to_string(step) + ".args.1")
             .at(0);
-    std::vector<float> tau_buf(DIM);
-    grootComputeActionTauEnc(bucket, DIM, tau_buf.data());
+    std::vector<float> tauBuf(DIM);
+    grootComputeActionTauEnc(bucket, DIM, tauBuf.data());
     struct ggml_tensor* tau = ggml_new_tensor_1d(c, GGML_TYPE_F32, DIM);
-    std::memcpy(tau->data, tau_buf.data(), tau_buf.size() * sizeof(float));
+    std::memcpy(tau->data, tauBuf.data(), tauBuf.size() * sizeof(float));
 
     // Additive key masks [S, N+1].
-    const int t_tok = N_ACT + 1;
-    struct ggml_tensor* imMask = ggml_new_tensor_2d(c, GGML_TYPE_F32, S_TOK, t_tok);
-    struct ggml_tensor* txMask = ggml_new_tensor_2d(c, GGML_TYPE_F32, S_TOK, t_tok);
+    const int tTok = N_ACT + 1;
+    struct ggml_tensor* imMask =
+        ggml_new_tensor_2d(c, GGML_TYPE_F32, S_TOK, tTok);
+    struct ggml_tensor* txMask =
+        ggml_new_tensor_2d(c, GGML_TYPE_F32, S_TOK, tTok);
     auto* imp = static_cast<float*>(imMask->data);
     auto* txp = static_cast<float*>(txMask->data);
-    for (int q = 0; q < t_tok; ++q) {
+    for (int q = 0; q < tTok; ++q) {
       for (int s = 0; s < S_TOK; ++s) {
-        const bool valid = bb_mask[s] > 0.5f;
-        const bool isImg = image_mask[s] > 0.5f;
+        const bool valid = bbMask[s] > 0.5f;
+        const bool isImg = imageMask[s] > 0.5f;
         imp[q * S_TOK + s] = (valid && isImg) ? 0.0f : -INFINITY;
         txp[q * S_TOK + s] = (valid && !isImg) ? 0.0f : -INFINITY;
       }
     }
 
     // af = action_encoder(actions, tau) + position_embedding[:40]
-    struct ggml_tensor* af =
-        grootBuildActionEncoderGraph(c, actT, tau, aeW1, aeW2, aeW3, DIM, N_ACT);
+    struct ggml_tensor* af = grootBuildActionEncoderGraph(
+        c, actT, tau, aeW1, aeW2, aeW3, DIM, N_ACT);
     ASSERT_NE(af, nullptr);
     struct ggml_tensor* pos =
         ggml_view_2d(c, posEmbedW, DIM, N_ACT, posEmbedW->nb[1], 0);
@@ -208,8 +217,23 @@ TEST(GrootM4_4, EulerLoopMatchesPytorch) {
 
     // DiT → action decoder → velocity[:, -40:]
     struct ggml_tensor* out = grootBuildDitGraph(
-        c, sa, temb, vl, imMask, txMask, dw, N_LAYERS, N_HEADS, HEAD_DIM, DIM,
-        CROSS_DIM, FFN_INNER, OUTPUT_DIM, ATTEND_TEXT_EVERY_N, 1e-5f, nullptr);
+        c,
+        sa,
+        temb,
+        vl,
+        imMask,
+        txMask,
+        dw,
+        N_LAYERS,
+        N_HEADS,
+        HEAD_DIM,
+        DIM,
+        CROSS_DIM,
+        FFN_INNER,
+        OUTPUT_DIM,
+        ATTEND_TEXT_EVERY_N,
+        1e-5f,
+        nullptr);
     ASSERT_NE(out, nullptr);
     struct ggml_tensor* pred = grootBuildCategoryMlpGraph(c, out, dec1, dec2);
     ASSERT_NE(pred, nullptr); // [132, 41]
@@ -244,5 +268,5 @@ TEST(GrootM4_4, EulerLoopMatchesPytorch) {
   }
 
   gguf_free(gguf);
-  ggml_free(ctx_w);
+  ggml_free(ctxW);
 }

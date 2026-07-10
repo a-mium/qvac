@@ -35,7 +35,7 @@ namespace qvac_lib_infer_vla_ggml {
 // exactly (ported graph uses the same literal string lookups).
 
 struct GrootVisionBlockWeights {
-  struct ggml_tensor* ln1_w;      // v.blk.N.ln1.weight
+  struct ggml_tensor* ln1_w; // v.blk.N.ln1.weight
   struct ggml_tensor* ln1_b;
   struct ggml_tensor* attn_qkv_w; // v.blk.N.attn_qkv.weight — fused QKV
   struct ggml_tensor* attn_qkv_b;
@@ -43,9 +43,11 @@ struct GrootVisionBlockWeights {
   struct ggml_tensor* attn_out_b;
   struct ggml_tensor* ln2_w;
   struct ggml_tensor* ln2_b;
-  struct ggml_tensor* ffn_up_w;   // v.blk.N.ffn_up.weight — (hidden -> intermediate)
+  struct ggml_tensor*
+      ffn_up_w; // v.blk.N.ffn_up.weight — (hidden -> intermediate)
   struct ggml_tensor* ffn_up_b;
-  struct ggml_tensor* ffn_down_w; // v.blk.N.ffn_down.weight — (intermediate -> hidden)
+  struct ggml_tensor*
+      ffn_down_w; // v.blk.N.ffn_down.weight — (intermediate -> hidden)
   struct ggml_tensor* ffn_down_b;
 };
 
@@ -55,24 +57,28 @@ struct GrootVisionBlockWeights {
 struct GrootDeepstackMergerWeights {
   struct ggml_tensor* norm_w; // v.deepstack.N.norm.weight
   struct ggml_tensor* norm_b;
-  struct ggml_tensor* fc1_w;  // v.deepstack.N.fc1.weight
+  struct ggml_tensor* fc1_w; // v.deepstack.N.fc1.weight
   struct ggml_tensor* fc1_b;
-  struct ggml_tensor* fc2_w;  // v.deepstack.N.fc2.weight
+  struct ggml_tensor* fc2_w; // v.deepstack.N.fc2.weight
   struct ggml_tensor* fc2_b;
 };
 
 struct GrootVisionWeights {
-  struct ggml_tensor* patch_embd_w;   // v.patch_embd.weight — first temporal half of Conv3D
-  struct ggml_tensor* patch_embd_w1;  // v.patch_embd.weight.1 — second temporal half
-  struct ggml_tensor* patch_embd_b;   // v.patch_embd.bias
-  struct ggml_tensor* position_embd; // v.position_embd.weight — (hidden, num_position_embeddings)
+  struct ggml_tensor*
+      patch_embd_w; // v.patch_embd.weight — first temporal half of Conv3D
+  struct ggml_tensor*
+      patch_embd_w1; // v.patch_embd.weight.1 — second temporal half
+  struct ggml_tensor* patch_embd_b;  // v.patch_embd.bias
+  struct ggml_tensor* position_embd; // v.position_embd.weight — (hidden,
+                                     // num_position_embeddings)
   std::vector<GrootVisionBlockWeights> blocks; // 24 entries
-  std::vector<GrootDeepstackMergerWeights> deepstack_mergers; // 3 entries, indices [5,11,17]
+  std::vector<GrootDeepstackMergerWeights>
+      deepstack_mergers;         // 3 entries, indices [5,11,17]
   struct ggml_tensor* post_ln_w; // v.post_ln.weight
   struct ggml_tensor* post_ln_b;
-  struct ggml_tensor* mm_0_w;    // mm.0.weight — merger projection 1
+  struct ggml_tensor* mm_0_w; // mm.0.weight — merger projection 1
   struct ggml_tensor* mm_0_b;
-  struct ggml_tensor* mm_2_w;    // mm.2.weight — merger projection 2
+  struct ggml_tensor* mm_2_w; // mm.2.weight — merger projection 2
   struct ggml_tensor* mm_2_b;
 };
 
@@ -85,7 +91,8 @@ struct GrootTextBlockWeights {
   struct ggml_tensor* attn_k_w;      // blk.N.attn_k.weight
   struct ggml_tensor* attn_v_w;      // blk.N.attn_v.weight
   struct ggml_tensor* attn_output_w; // blk.N.attn_output.weight
-  struct ggml_tensor* attn_q_norm_w; // blk.N.attn_q_norm.weight — per-head RMSNorm, width=head_dim
+  struct ggml_tensor* attn_q_norm_w; // blk.N.attn_q_norm.weight — per-head
+                                     // RMSNorm, width=head_dim
   struct ggml_tensor* attn_k_norm_w; // blk.N.attn_k_norm.weight
   struct ggml_tensor* ffn_norm_w;    // blk.N.ffn_norm.weight
   struct ggml_tensor* ffn_gate_w;    // blk.N.ffn_gate.weight
@@ -94,8 +101,8 @@ struct GrootTextBlockWeights {
 };
 
 struct GrootTextWeights {
-  struct ggml_tensor* token_embd_w; // token_embd.weight
-  struct ggml_tensor* output_norm_w; // output_norm.weight
+  struct ggml_tensor* token_embd_w;          // token_embd.weight
+  struct ggml_tensor* output_norm_w;         // output_norm.weight
   std::vector<GrootTextBlockWeights> blocks; // 16 entries
   // `output.weight` (lm_head) exists in the GGUF but is never loaded —
   // GR00T only consumes hidden_states, never generates text.
@@ -116,14 +123,16 @@ struct GrootVlfusionBlockWeights {
   struct ggml_tensor* attn_v_b;
   struct ggml_tensor* attn_out_w;
   struct ggml_tensor* attn_out_b;
-  struct ggml_tensor* ffn_in_w;  // net.0.proj — single (non-gated) GELU-approximate, dim -> 4*dim
+  struct ggml_tensor* ffn_in_w; // net.0.proj — single (non-gated)
+                                // GELU-approximate, dim -> 4*dim
   struct ggml_tensor* ffn_in_b;
   struct ggml_tensor* ffn_out_w; // net.2 — 4*dim -> dim
   struct ggml_tensor* ffn_out_b;
 };
 
 struct GrootVlfusionWeights {
-  struct ggml_tensor* vlln_w; // vlfusion.vlln.weight — plain LayerNorm on backbone_embedding_dim
+  struct ggml_tensor* vlln_w; // vlfusion.vlln.weight — plain LayerNorm on
+                              // backbone_embedding_dim
   struct ggml_tensor* vlln_b;
   std::vector<GrootVlfusionBlockWeights> blocks; // 4 entries
 };
@@ -135,11 +144,14 @@ struct GrootVlfusionWeights {
 // plain self-attention. All blocks use AdaLayerNorm (timestep-conditioned).
 
 struct GrootDitBlockWeights {
-  struct ggml_tensor* norm1_linear_w; // dit.blk.N.norm1_linear.weight — AdaLayerNorm's SiLU+Linear -> (2*dim,)
+  struct ggml_tensor* norm1_linear_w; // dit.blk.N.norm1_linear.weight —
+                                      // AdaLayerNorm's SiLU+Linear -> (2*dim,)
   struct ggml_tensor* norm1_linear_b;
   struct ggml_tensor* attn_q_w;
   struct ggml_tensor* attn_q_b;
-  struct ggml_tensor* attn_k_w;  // cross-attn blocks: (dim, backbone_embedding_dim); self-attn: (dim, dim)
+  struct ggml_tensor*
+      attn_k_w; // cross-attn blocks: (dim, backbone_embedding_dim); self-attn:
+                // (dim, dim)
   struct ggml_tensor* attn_k_b;
   struct ggml_tensor* attn_v_w;
   struct ggml_tensor* attn_v_b;
@@ -152,16 +164,24 @@ struct GrootDitBlockWeights {
 };
 
 struct GrootDitWeights {
-  struct ggml_tensor* timestep_embedder_l1_w; // dit.timestep_embedder.linear_1.weight — (256 -> dim)
+  struct ggml_tensor*
+      timestep_embedder_l1_w; // dit.timestep_embedder.linear_1.weight
+                              // — (256 -> dim)
   struct ggml_tensor* timestep_embedder_l1_b;
-  struct ggml_tensor* timestep_embedder_l2_w; // dit.timestep_embedder.linear_2.weight — (dim -> dim)
+  struct ggml_tensor*
+      timestep_embedder_l2_w; // dit.timestep_embedder.linear_2.weight
+                              // — (dim -> dim)
   struct ggml_tensor* timestep_embedder_l2_b;
   std::vector<GrootDitBlockWeights> blocks; // 32 entries
-  struct ggml_tensor* proj_out_1_w; // dit.proj_out_1.weight — (dim -> 2*dim), final AdaLN shift/scale
+  struct ggml_tensor* proj_out_1_w; // dit.proj_out_1.weight — (dim -> 2*dim),
+                                    // final AdaLN shift/scale
   struct ggml_tensor* proj_out_1_b;
-  struct ggml_tensor* proj_out_2_w; // dit.proj_out_2.weight — (dim -> output_dim)
+  struct ggml_tensor*
+      proj_out_2_w; // dit.proj_out_2.weight — (dim -> output_dim)
   struct ggml_tensor* proj_out_2_b;
-  struct ggml_tensor* position_embedding_w; // dit.position_embedding.weight — (input_embedding_dim, max_seq_len)
+  struct ggml_tensor*
+      position_embedding_w; // dit.position_embedding.weight —
+                            // (input_embedding_dim, max_seq_len)
 };
 
 // ── Embodiment-conditioned encode/decode, sliced to one embodiment ──────
@@ -169,24 +189,37 @@ struct GrootDitWeights {
 // conversion time) — no runtime embodiment-ID branching.
 
 struct GrootLinearWeights {
-  struct ggml_tensor* weight; // [in, out] layout (CategorySpecificLinear does x @ W, not nn.Linear's W @ x)
+  struct ggml_tensor* weight; // [in, out] layout (CategorySpecificLinear does x
+                              // @ W, not nn.Linear's W @ x)
   struct ggml_tensor* bias;
 };
 
 struct GrootEmbodimentWeights {
-  GrootLinearWeights state_encoder_layer1; // embodiment.state_encoder.layer1 — (max_state_dim -> hidden_size)
-  GrootLinearWeights state_encoder_layer2; // embodiment.state_encoder.layer2 — (hidden_size -> input_embedding_dim)
-  GrootLinearWeights action_encoder_w1;    // embodiment.action_encoder.w1 — (max_action_dim -> input_embedding_dim)
-  GrootLinearWeights action_encoder_w2;    // embodiment.action_encoder.w2 — (2*input_embedding_dim -> input_embedding_dim)
-  GrootLinearWeights action_encoder_w3;    // embodiment.action_encoder.w3 — (input_embedding_dim -> input_embedding_dim)
-  GrootLinearWeights action_decoder_layer1; // embodiment.action_decoder.layer1 — (dit_output_dim -> hidden_size)
-  GrootLinearWeights action_decoder_layer2; // embodiment.action_decoder.layer2 — (hidden_size -> max_action_dim)
+  GrootLinearWeights state_encoder_layer1; // embodiment.state_encoder.layer1 —
+                                           // (max_state_dim -> hidden_size)
+  GrootLinearWeights
+      state_encoder_layer2; // embodiment.state_encoder.layer2 — (hidden_size ->
+                            // input_embedding_dim)
+  GrootLinearWeights
+      action_encoder_w1; // embodiment.action_encoder.w1 — (max_action_dim ->
+                         // input_embedding_dim)
+  GrootLinearWeights
+      action_encoder_w2; // embodiment.action_encoder.w2 —
+                         // (2*input_embedding_dim -> input_embedding_dim)
+  GrootLinearWeights
+      action_encoder_w3; // embodiment.action_encoder.w3 — (input_embedding_dim
+                         // -> input_embedding_dim)
+  GrootLinearWeights action_decoder_layer1; // embodiment.action_decoder.layer1
+                                            // — (dit_output_dim -> hidden_size)
+  GrootLinearWeights action_decoder_layer2; // embodiment.action_decoder.layer2
+                                            // — (hidden_size -> max_action_dim)
 };
 
 // ── Sub-graph helpers (milestone-testable) ─────────────────────────────
 // Each graph builder has a standalone entry point so the matching GoogleTest
 // can drive it against Phase 0 oracle activations without going through
-// GrootModel::infer. Implementations in groot.cpp; tests test/unit/test_groot_m*.
+// GrootModel::infer. Implementations in groot.cpp; tests
+// test/unit/test_groot_m*.
 
 // M4.1 — VL fusion: vlln (plain LayerNorm) then a 4-layer plain-LayerNorm
 // SelfAttentionTransformer (diffusers BasicTransformerBlock, self-attn only,
@@ -222,15 +255,15 @@ void grootComputeTimestepProj(float t, int channels, float* out);
 // TimestepEmbedding is Linear→SiLU→Linear (no activation on the input
 // projection). Produces ne=[embedding_dim=1536].
 struct ggml_tensor* grootBuildTimestepMlpGraph(
-    struct ggml_context* ctx, struct ggml_tensor* proj,
-    struct ggml_tensor* l1W, struct ggml_tensor* l1B, struct ggml_tensor* l2W,
-    struct ggml_tensor* l2B);
+    struct ggml_context* ctx, struct ggml_tensor* proj, struct ggml_tensor* l1W,
+    struct ggml_tensor* l1B, struct ggml_tensor* l2W, struct ggml_tensor* l2B);
 
 // SinusoidalPositionalEncoding for the action encoder's timestep term
 // (embodiment_conditioned_mlp.py): half_dim = dim/2, freqs = t · exp(-ln(10000)
 // · i/half_dim), out = [sin block | cos block]. Same integer bucket `t`,
 // broadcast across all action tokens (so it's one `dim`-vector). Distinct from
-// the DiT timestep encoder above (different freq denominator and sin/cos order).
+// the DiT timestep encoder above (different freq denominator and sin/cos
+// order).
 void grootComputeActionTauEnc(float t, int dim, float* out);
 
 // CategorySpecificMLP: Linear1 → ReLU → Linear2. The `x @ W` weight layout
@@ -260,7 +293,8 @@ struct ggml_tensor* grootBuildActionEncoderGraph(
 //   attn = attn1(nh, encoder_hidden_states|None, key_mask|None)
 //   h    = attn + x
 //   nh3  = layernorm_noaffine(h)
-//   h    = ff(nh3) + h                                         # GELU-approx FFN
+//   h    = ff(nh3) + h                                         # GELU-approx
+//   FFN
 // Even blocks cross-attend to `encoder` (280-token VL features,
 // cross_attention_dim=2048) under `keyMask`; odd blocks self-attend. Attention
 // is unfused F32 (41 queries × ≤280 keys is tiny, key-mask applies via
@@ -276,11 +310,12 @@ struct ggml_tensor* grootBuildDitBlockGraph(
     int crossDim, int ffnInner, float eps);
 
 // Full DiT: 32 alternating blocks (M4.3) then the output head — norm_out
-// (LayerNorm no-affine, eps 1e-6) modulated by AdaLN from `proj_out_1(silu(temb))`
-// then `proj_out_2`. Even/odd alternation and the text/image cross-attn key-mask
-// flipping per `attendTextEveryN` are handled internally. `imageKeyMask` /
-// `textKeyMask` are the two prebuilt additive masks (ne=[S, T]); even blocks use
-// text on `idx % (2*attendTextEveryN) == 0` else image.
+// (LayerNorm no-affine, eps 1e-6) modulated by AdaLN from
+// `proj_out_1(silu(temb))` then `proj_out_2`. Even/odd alternation and the
+// text/image cross-attn key-mask flipping per `attendTextEveryN` are handled
+// internally. `imageKeyMask` / `textKeyMask` are the two prebuilt additive
+// masks (ne=[S, T]); even blocks use text on `idx % (2*attendTextEveryN) == 0`
+// else image.
 //
 // `hidden` ne=[dim, T]; `temb` ne=[dim]; `encoder` ne=[crossDim, S]. If
 // `outBlocks` is non-null it's filled with the T-per-block hidden states (for
@@ -309,13 +344,15 @@ struct ggml_tensor* grootBuildDitGraph(
 // axis3] (axis3 unused, width-0 section). `mask` ne=[T, T] additive causal
 // (0 attend / −inf). `deepstack` holds 3 tensors ne=[dim, T] (deepstack visual
 // features scattered to image-token positions, zero elsewhere) added to the
-// residual after layers 0/1/2; entries may be null to skip. Returns ne=[dim, T].
+// residual after layers 0/1/2; entries may be null to skip. Returns ne=[dim,
+// T].
 struct ggml_tensor* grootBuildTextDecoderGraph(
     struct ggml_context* ctx, struct ggml_tensor* inputsEmbeds,
     struct ggml_tensor* positions, struct ggml_tensor* mask,
-    const std::vector<struct ggml_tensor*>& deepstack, const GrootTextWeights& w,
-    int nLayers, int nTokens, int nHead, int nHeadKv, int headDim, int ffnLen,
-    float ropeFreqBase, const int ropeSections[4], float rmsEps);
+    const std::vector<struct ggml_tensor*>& deepstack,
+    const GrootTextWeights& w, int nLayers, int nTokens, int nHead, int nHeadKv,
+    int headDim, int ffnLen, float ropeFreqBase, const int ropeSections[4],
+    float rmsEps);
 
 // M4.5 (vision) — reconstruct the Qwen3-VL patch embedding as a plain Linear
 // weight ne=[inFlat, nEmbd] from the two temporal-split Conv2D halves the
@@ -339,12 +376,13 @@ struct ggml_tensor* grootBuildPatchEmbedLinear(
 // embeddings are bilinear-interpolated from the √numPosEmbd base grid to the
 // actual grid, reordered into 2×2-merge sequence order, and tiled per image.
 //
-// `patchInput` ne=[inFlat, nPatches]; `patchWLin` from grootBuildPatchEmbedLinear;
-// `positionEmbd` = raw v.position_embd.weight ne=[nEmbd, numPosEmbd]; `positions`
-// ne=[nPatches*4] i32 vision M-RoPE ids; `mask` ne=[nPatches, nPatches] additive
-// (0/−inf) block-diagonal per image. Returns the merged image embeds
-// ne=[outHidden, nPatches/merge²] (== oracle vision_output.0). If `outDeepstack`
-// is non-null it's filled with the 3 deepstack feature maps (== vision_output.1.*).
+// `patchInput` ne=[inFlat, nPatches]; `patchWLin` from
+// grootBuildPatchEmbedLinear; `positionEmbd` = raw v.position_embd.weight
+// ne=[nEmbd, numPosEmbd]; `positions` ne=[nPatches*4] i32 vision M-RoPE ids;
+// `mask` ne=[nPatches, nPatches] additive (0/−inf) block-diagonal per image.
+// Returns the merged image embeds ne=[outHidden, nPatches/merge²] (== oracle
+// vision_output.0). If `outDeepstack` is non-null it's filled with the 3
+// deepstack feature maps (== vision_output.1.*).
 struct ggml_tensor* grootBuildVisionGraph(
     struct ggml_context* ctx, struct ggml_tensor* patchInput,
     struct ggml_tensor* patchWLin, struct ggml_tensor* patchBias,

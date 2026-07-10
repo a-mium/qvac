@@ -24,7 +24,8 @@ namespace qvac_lib_infer_vla_ggml {
 // after which the next id resumes at `st + max(gh, gw)`. Output layout matches
 // the text-decoder graph's `positions` input: axis-major [axis0|axis1|axis2|
 // axis3] each of length `nTokens`, axis3 (the unused width-0 rope section) left
-// zero. Verified byte-for-byte against the oracle text_model_input.position_ids.
+// zero. Verified byte-for-byte against the oracle
+// text_model_input.position_ids.
 void grootDeriveMRopePositions(
     const int32_t* tokens, int nTokens, int imageTokenId, int gh, int gw,
     int32_t* out) {
@@ -60,15 +61,16 @@ namespace {
 
 // Promote non-F32 weights to F32 on-graph so they share a dtype with the
 // F32 activations they combine with (biases/norm weights are stored F16).
-static struct ggml_tensor* grootToF32(
-    struct ggml_context* ctx, struct ggml_tensor* x) {
+static struct ggml_tensor*
+grootToF32(struct ggml_context* ctx, struct ggml_tensor* x) {
   if (x != nullptr && x->type != GGML_TYPE_F32) {
     return ggml_cast(ctx, x, GGML_TYPE_F32);
   }
   return x;
 }
 
-// LayerNorm with weight + bias (diffusers/torch nn.LayerNorm, eps default 1e-5).
+// LayerNorm with weight + bias (diffusers/torch nn.LayerNorm, eps default
+// 1e-5).
 static struct ggml_tensor* grootLayerNorm(
     struct ggml_context* ctx, struct ggml_tensor* x, struct ggml_tensor* weight,
     struct ggml_tensor* bias, float eps) {
@@ -153,9 +155,10 @@ struct GrootModelInternal {
   std::vector<int> vision_deepstack_indexes; // [5, 11, 17]
   float vision_rms_norm_eps = 1e-6f;
 
-  int hidden_size = 1024;             // action_head.hidden_size
-  int input_embedding_dim = 1536;     // DiT inner_dim
-  int backbone_embedding_dim = 2048;  // vlfusion inner_dim / DiT cross_attention_dim
+  int hidden_size = 1024;         // action_head.hidden_size
+  int input_embedding_dim = 1536; // DiT inner_dim
+  int backbone_embedding_dim =
+      2048; // vlfusion inner_dim / DiT cross_attention_dim
   int max_state_dim = 132;
   int max_action_dim = 132;
   int action_horizon = 40;
@@ -315,7 +318,8 @@ static std::unique_ptr<GrootModelInternal> grootLoadModel(
       ggufGetF32Or(m->gguf, "groot.text.rms_norm_eps", 1e-6f);
 
   m->vision_depth = ggufGetU32Or(m->gguf, "groot.vision.depth", 24);
-  m->vision_hidden_size = ggufGetU32Or(m->gguf, "groot.vision.hidden_size", 1024);
+  m->vision_hidden_size =
+      ggufGetU32Or(m->gguf, "groot.vision.hidden_size", 1024);
   m->vision_num_heads = ggufGetU32Or(m->gguf, "groot.vision.num_heads", 16);
   m->vision_patch_size = ggufGetU32Or(m->gguf, "groot.vision.patch_size", 16);
   m->vision_spatial_merge_size =
@@ -332,7 +336,8 @@ static std::unique_ptr<GrootModelInternal> grootLoadModel(
       ggufGetF32Or(m->gguf, "groot.vision.rms_norm_eps", 1e-6f);
 
   m->hidden_size = ggufGetU32Or(m->gguf, "groot.hidden_size", 1024);
-  m->input_embedding_dim = ggufGetU32Or(m->gguf, "groot.input_embedding_dim", 1536);
+  m->input_embedding_dim =
+      ggufGetU32Or(m->gguf, "groot.input_embedding_dim", 1536);
   m->backbone_embedding_dim =
       ggufGetU32Or(m->gguf, "groot.backbone_embedding_dim", 2048);
   m->max_state_dim = ggufGetU32Or(m->gguf, "groot.max_state_dim", 132);
@@ -353,10 +358,12 @@ static std::unique_ptr<GrootModelInternal> grootLoadModel(
   m->dit_attend_text_every_n_blocks =
       ggufGetU32Or(m->gguf, "groot.dit.attend_text_every_n_blocks", 2);
 
-  m->vlfusion_num_layers = ggufGetU32Or(m->gguf, "groot.vlfusion.num_layers", 4);
+  m->vlfusion_num_layers =
+      ggufGetU32Or(m->gguf, "groot.vlfusion.num_layers", 4);
   m->vlfusion_num_heads = ggufGetU32Or(m->gguf, "groot.vlfusion.num_heads", 32);
   m->vlfusion_head_dim = ggufGetU32Or(m->gguf, "groot.vlfusion.head_dim", 64);
-  m->vlfusion_ffn_inner = ggufGetU32Or(m->gguf, "groot.vlfusion.ffn_inner", 8192);
+  m->vlfusion_ffn_inner =
+      ggufGetU32Or(m->gguf, "groot.vlfusion.ffn_inner", 8192);
 
   m->embodiment_tag = ggufGetStrOr(m->gguf, "groot.embodiment_tag", "");
   m->embodiment_cat_id =
@@ -365,25 +372,26 @@ static std::unique_ptr<GrootModelInternal> grootLoadModel(
   // Sanity-check hparams — reject zeros (division/scaling UB) and
   // unreasonable upper bounds (OOM / integer overflow from crafted GGUFs).
   if (m->text_num_layers == 0 || m->text_num_layers > 512 ||
-      m->vision_depth == 0 || m->vision_depth > 512 ||
-      m->dit_num_layers == 0 || m->dit_num_layers > 512 ||
-      m->vlfusion_num_layers == 0 || m->vlfusion_num_layers > 512 ||
-      m->action_horizon == 0 || m->action_horizon > 1024 ||
-      m->max_state_dim == 0 || m->max_state_dim > 4096 ||
-      m->max_action_dim == 0 || m->max_action_dim > 4096 ||
-      m->text_hidden_size == 0 || m->text_num_heads == 0 ||
-      m->text_num_kv_heads == 0 || m->text_head_dim == 0 ||
-      m->text_vocab_size == 0 || m->text_vocab_size > 1048576 ||
-      m->vision_hidden_size == 0 || m->vision_num_heads == 0 ||
-      m->vision_patch_size == 0 || m->hidden_size == 0 ||
-      m->input_embedding_dim == 0 || m->backbone_embedding_dim == 0 ||
-      m->dit_num_heads == 0 || m->dit_head_dim == 0 ||
-      m->vlfusion_num_heads == 0 || m->vlfusion_head_dim == 0 ||
-      m->num_inference_timesteps == 0 || m->num_inference_timesteps > 1024 ||
+      m->vision_depth == 0 || m->vision_depth > 512 || m->dit_num_layers == 0 ||
+      m->dit_num_layers > 512 || m->vlfusion_num_layers == 0 ||
+      m->vlfusion_num_layers > 512 || m->action_horizon == 0 ||
+      m->action_horizon > 1024 || m->max_state_dim == 0 ||
+      m->max_state_dim > 4096 || m->max_action_dim == 0 ||
+      m->max_action_dim > 4096 || m->text_hidden_size == 0 ||
+      m->text_num_heads == 0 || m->text_num_kv_heads == 0 ||
+      m->text_head_dim == 0 || m->text_vocab_size == 0 ||
+      m->text_vocab_size > 1048576 || m->vision_hidden_size == 0 ||
+      m->vision_num_heads == 0 || m->vision_patch_size == 0 ||
+      m->hidden_size == 0 || m->input_embedding_dim == 0 ||
+      m->backbone_embedding_dim == 0 || m->dit_num_heads == 0 ||
+      m->dit_head_dim == 0 || m->vlfusion_num_heads == 0 ||
+      m->vlfusion_head_dim == 0 || m->num_inference_timesteps == 0 ||
+      m->num_inference_timesteps > 1024 ||
       m->vision_deepstack_indexes.empty() ||
       m->text_hidden_size % m->text_num_heads != 0 ||
       m->dit_num_heads * m->dit_head_dim != m->input_embedding_dim ||
-      m->vlfusion_num_heads * m->vlfusion_head_dim != m->backbone_embedding_dim) {
+      m->vlfusion_num_heads * m->vlfusion_head_dim !=
+          m->backbone_embedding_dim) {
     throw std::runtime_error(
         "grootLoadModel: one or more GGUF hparams are out of expected range "
         "or inconsistent");
@@ -398,7 +406,8 @@ static std::unique_ptr<GrootModelInternal> grootLoadModel(
   auto mustGet = [&](const std::string& name) -> struct ggml_tensor* {
     struct ggml_tensor* t = ggml_get_tensor(m->ctx_w, name.c_str());
     if (t == nullptr) {
-      throw std::runtime_error("grootLoadModel: tensor missing from GGUF: " + name);
+      throw std::runtime_error(
+          "grootLoadModel: tensor missing from GGUF: " + name);
     }
     return t;
   };
@@ -427,7 +436,8 @@ static std::unique_ptr<GrootModelInternal> grootLoadModel(
   }
   m->vision.deepstack_mergers.resize(m->vision_deepstack_indexes.size());
   for (size_t i = 0; i < m->vision_deepstack_indexes.size(); ++i) {
-    const std::string b = "v.deepstack." + std::to_string(m->vision_deepstack_indexes[i]);
+    const std::string b =
+        "v.deepstack." + std::to_string(m->vision_deepstack_indexes[i]);
     auto& dw = m->vision.deepstack_mergers[i];
     dw.norm_w = mustGet(b + ".norm.weight");
     dw.norm_b = mustGet(b + ".norm.bias");
@@ -489,10 +499,14 @@ static std::unique_ptr<GrootModelInternal> grootLoadModel(
   }
 
   // ── DiT ───────────────────────────────────────────────────────────────
-  m->dit.timestep_embedder_l1_w = mustGet("dit.timestep_embedder.linear_1.weight");
-  m->dit.timestep_embedder_l1_b = mustGet("dit.timestep_embedder.linear_1.bias");
-  m->dit.timestep_embedder_l2_w = mustGet("dit.timestep_embedder.linear_2.weight");
-  m->dit.timestep_embedder_l2_b = mustGet("dit.timestep_embedder.linear_2.bias");
+  m->dit.timestep_embedder_l1_w =
+      mustGet("dit.timestep_embedder.linear_1.weight");
+  m->dit.timestep_embedder_l1_b =
+      mustGet("dit.timestep_embedder.linear_1.bias");
+  m->dit.timestep_embedder_l2_w =
+      mustGet("dit.timestep_embedder.linear_2.weight");
+  m->dit.timestep_embedder_l2_b =
+      mustGet("dit.timestep_embedder.linear_2.bias");
   m->dit.blocks.resize(m->dit_num_layers);
   for (int i = 0; i < m->dit_num_layers; ++i) {
     const std::string b = "dit.blk." + std::to_string(i);
@@ -522,13 +536,17 @@ static std::unique_ptr<GrootModelInternal> grootLoadModel(
   auto getLinear = [&](const std::string& prefix) -> GrootLinearWeights {
     return {mustGet(prefix + ".weight"), mustGet(prefix + ".bias")};
   };
-  m->embodiment.state_encoder_layer1 = getLinear("embodiment.state_encoder.layer1");
-  m->embodiment.state_encoder_layer2 = getLinear("embodiment.state_encoder.layer2");
+  m->embodiment.state_encoder_layer1 =
+      getLinear("embodiment.state_encoder.layer1");
+  m->embodiment.state_encoder_layer2 =
+      getLinear("embodiment.state_encoder.layer2");
   m->embodiment.action_encoder_w1 = getLinear("embodiment.action_encoder.w1");
   m->embodiment.action_encoder_w2 = getLinear("embodiment.action_encoder.w2");
   m->embodiment.action_encoder_w3 = getLinear("embodiment.action_encoder.w3");
-  m->embodiment.action_decoder_layer1 = getLinear("embodiment.action_decoder.layer1");
-  m->embodiment.action_decoder_layer2 = getLinear("embodiment.action_decoder.layer2");
+  m->embodiment.action_decoder_layer1 =
+      getLinear("embodiment.action_decoder.layer1");
+  m->embodiment.action_decoder_layer2 =
+      getLinear("embodiment.action_decoder.layer2");
 
   return m;
 }
@@ -562,13 +580,19 @@ static struct ggml_tensor* grootBuildVlfusionBlock(
   struct ggml_tensor* kf16 = ggml_cast(ctx, k, GGML_TYPE_F16);
   struct ggml_tensor* vf16 = ggml_cast(ctx, v, GGML_TYPE_F16);
   struct ggml_tensor* attnOut = ggml_flash_attn_ext(
-      ctx, q, kf16, vf16, /*mask=*/nullptr,
-      1.0f / std::sqrt(static_cast<float>(headDim)), /*max_bias=*/0.0f,
+      ctx,
+      q,
+      kf16,
+      vf16,
+      /*mask=*/nullptr,
+      1.0f / std::sqrt(static_cast<float>(headDim)),
+      /*max_bias=*/0.0f,
       /*logit_softcap=*/0.0f);
   ggml_flash_attn_ext_set_prec(attnOut, GGML_PREC_F32);
   attnOut = ggml_reshape_2d(ctx, attnOut, dim, nTokens);
 
-  struct ggml_tensor* proj = grootLinear(ctx, attnOut, w.attn_out_w, w.attn_out_b);
+  struct ggml_tensor* proj =
+      grootLinear(ctx, attnOut, w.attn_out_w, w.attn_out_b);
   h = ggml_add(ctx, proj, residual);
 
   residual = h;
@@ -615,8 +639,8 @@ void grootComputeTimestepProj(float t, int channels, float* out) {
   const double logMax = std::log(10000.0);
   for (int i = 0; i < half; ++i) {
     // downscale_freq_shift=1 → denominator (half - 1).
-    const double exponent = -logMax * static_cast<double>(i) /
-                            static_cast<double>(half - 1);
+    const double exponent =
+        -logMax * static_cast<double>(i) / static_cast<double>(half - 1);
     const double freq = std::exp(exponent);
     const double angle = static_cast<double>(t) * freq;
     out[i] = static_cast<float>(std::cos(angle));        // flip: cos first
@@ -640,9 +664,8 @@ void grootComputeActionTauEnc(float t, int dim, float* out) {
 }
 
 struct ggml_tensor* grootBuildTimestepMlpGraph(
-    struct ggml_context* ctx, struct ggml_tensor* proj,
-    struct ggml_tensor* l1W, struct ggml_tensor* l1B, struct ggml_tensor* l2W,
-    struct ggml_tensor* l2B) {
+    struct ggml_context* ctx, struct ggml_tensor* proj, struct ggml_tensor* l1W,
+    struct ggml_tensor* l1B, struct ggml_tensor* l2W, struct ggml_tensor* l2B) {
   if (ctx == nullptr || proj == nullptr || l1W == nullptr || l2W == nullptr) {
     return nullptr;
   }
@@ -700,8 +723,10 @@ static struct ggml_tensor* grootAdaModulate(
     bool scaleFirst) {
   struct ggml_tensor* proj = grootLinear(ctx, ggml_silu(ctx, temb), linW, linB);
   const size_t half = static_cast<size_t>(dim) * ggml_element_size(proj);
-  struct ggml_tensor* scale = ggml_view_1d(ctx, proj, dim, scaleFirst ? 0 : half);
-  struct ggml_tensor* shift = ggml_view_1d(ctx, proj, dim, scaleFirst ? half : 0);
+  struct ggml_tensor* scale =
+      ggml_view_1d(ctx, proj, dim, scaleFirst ? 0 : half);
+  struct ggml_tensor* shift =
+      ggml_view_1d(ctx, proj, dim, scaleFirst ? half : 0);
   struct ggml_tensor* normed = ggml_norm(ctx, x, eps); // no affine
   // normed * (1 + scale) + shift = normed*scale + normed + shift, with the
   // (dim,) scale/shift broadcast across the T token axis.
@@ -733,10 +758,12 @@ static struct ggml_tensor* grootDitAttention(
   struct ggml_tensor* kq = ggml_mul_mat(ctx, k, q); // [S, T, nHeads]
   kq = ggml_soft_max_ext(
       ctx, kq, keyMask, 1.0f / std::sqrt(static_cast<float>(headDim)), 0.0f);
-  // v → [S, headDim, nHeads] so mul_mat(v, kq) sums over S → [headDim, T, nHeads].
+  // v → [S, headDim, nHeads] so mul_mat(v, kq) sums over S → [headDim, T,
+  // nHeads].
   v = ggml_cont(ctx, ggml_permute(ctx, v, 1, 0, 2, 3));
   struct ggml_tensor* kqv = ggml_mul_mat(ctx, v, kq); // [headDim, T, nHeads]
-  kqv = ggml_cont(ctx, ggml_permute(ctx, kqv, 0, 2, 1, 3)); // [headDim, nHeads, nQuery]
+  kqv = ggml_cont(
+      ctx, ggml_permute(ctx, kqv, 0, 2, 1, 3)); // [headDim, nHeads, nQuery]
   kqv = ggml_reshape_2d(ctx, kqv, dim, nQuery);
   return grootLinear(ctx, kqv, w.attn_out_w, w.attn_out_b);
 }
@@ -756,7 +783,13 @@ struct ggml_tensor* grootBuildDitBlockGraph(
   (void)ffnInner;
   // AdaLayerNorm (scale, shift order) → attention → residual.
   struct ggml_tensor* nh = grootAdaModulate(
-      ctx, x, temb, w.norm1_linear_w, w.norm1_linear_b, dim, eps,
+      ctx,
+      x,
+      temb,
+      w.norm1_linear_w,
+      w.norm1_linear_b,
+      dim,
+      eps,
       /*scaleFirst=*/true);
   struct ggml_tensor* kvSrc = (encoder != nullptr) ? encoder : nh;
   struct ggml_tensor* attn =
@@ -784,7 +817,8 @@ struct ggml_tensor* grootBuildDitGraph(
   }
   struct ggml_tensor* h = hidden;
   for (int idx = 0; idx < nLayers; ++idx) {
-    const bool selfAttn = (idx % 2 == 1); // AlternateVLDiT: odd blocks self-attend
+    const bool selfAttn =
+        (idx % 2 == 1); // AlternateVLDiT: odd blocks self-attend
     struct ggml_tensor* enc = selfAttn ? nullptr : encoder;
     struct ggml_tensor* mask = nullptr;
     if (!selfAttn) {
@@ -794,8 +828,18 @@ struct ggml_tensor* grootBuildDitGraph(
       mask = text ? textKeyMask : imageKeyMask;
     }
     h = grootBuildDitBlockGraph(
-        ctx, h, temb, enc, mask, w.blocks[idx], nHeads, headDim, dim, crossDim,
-        ffnInner, eps);
+        ctx,
+        h,
+        temb,
+        enc,
+        mask,
+        w.blocks[idx],
+        nHeads,
+        headDim,
+        dim,
+        crossDim,
+        ffnInner,
+        eps);
     if (outBlocks != nullptr) {
       outBlocks->push_back(h);
     }
@@ -805,7 +849,13 @@ struct ggml_tensor* grootBuildDitGraph(
   // proj_out_1 (shift, scale order — opposite of the block AdaLayerNorm), then
   // proj_out_2 to the action-space output dim.
   struct ggml_tensor* modulated = grootAdaModulate(
-      ctx, h, temb, w.proj_out_1_w, w.proj_out_1_b, dim, /*eps=*/1e-6f,
+      ctx,
+      h,
+      temb,
+      w.proj_out_1_w,
+      w.proj_out_1_b,
+      dim,
+      /*eps=*/1e-6f,
       /*scaleFirst=*/false);
   (void)outputDim;
   return grootLinear(ctx, modulated, w.proj_out_2_w, w.proj_out_2_b);
@@ -856,13 +906,35 @@ static struct ggml_tensor* grootTextAttention(
   int sections[4] = {
       ropeSections[0], ropeSections[1], ropeSections[2], ropeSections[3]};
   q = ggml_rope_multi(
-      ctx, q, positions, nullptr, headDim, sections, GGML_ROPE_TYPE_IMROPE,
-      /*n_ctx_orig=*/32768, ropeFreqBase, /*freq_scale=*/1.0f,
-      /*ext_factor=*/0.0f, /*attn_factor=*/1.0f, /*beta_fast=*/32.0f,
+      ctx,
+      q,
+      positions,
+      nullptr,
+      headDim,
+      sections,
+      GGML_ROPE_TYPE_IMROPE,
+      /*n_ctx_orig=*/32768,
+      ropeFreqBase,
+      /*freq_scale=*/1.0f,
+      /*ext_factor=*/0.0f,
+      /*attn_factor=*/1.0f,
+      /*beta_fast=*/32.0f,
       /*beta_slow=*/1.0f);
   k = ggml_rope_multi(
-      ctx, k, positions, nullptr, headDim, sections, GGML_ROPE_TYPE_IMROPE,
-      32768, ropeFreqBase, 1.0f, 0.0f, 1.0f, 32.0f, 1.0f);
+      ctx,
+      k,
+      positions,
+      nullptr,
+      headDim,
+      sections,
+      GGML_ROPE_TYPE_IMROPE,
+      32768,
+      ropeFreqBase,
+      1.0f,
+      0.0f,
+      1.0f,
+      32.0f,
+      1.0f);
 
   // [headDim, T, nHead] / [headDim, T, nHeadKv] — K broadcasts over the GQA
   // group (nHead / nHeadKv) inside ggml_mul_mat.
@@ -873,7 +945,8 @@ static struct ggml_tensor* grootTextAttention(
   struct ggml_tensor* kq = ggml_mul_mat(ctx, k, q); // [T_kv, T_q, nHead]
   kq = ggml_soft_max_ext(
       ctx, kq, mask, 1.0f / std::sqrt(static_cast<float>(headDim)), 0.0f);
-  // v → [T_kv, headDim, nHeadKv] so mul_mat sums over keys → [headDim, T_q, nHead].
+  // v → [T_kv, headDim, nHeadKv] so mul_mat sums over keys → [headDim, T_q,
+  // nHead].
   v = ggml_cont(ctx, ggml_permute(ctx, v, 1, 0, 2, 3));
   struct ggml_tensor* kqv = ggml_mul_mat(ctx, v, kq); // [headDim, T_q, nHead]
   kqv = ggml_cont(ctx, ggml_permute(ctx, kqv, 0, 2, 1, 3));
@@ -886,9 +959,10 @@ static struct ggml_tensor* grootTextAttention(
 struct ggml_tensor* grootBuildTextDecoderGraph(
     struct ggml_context* ctx, struct ggml_tensor* inputsEmbeds,
     struct ggml_tensor* positions, struct ggml_tensor* mask,
-    const std::vector<struct ggml_tensor*>& deepstack, const GrootTextWeights& w,
-    int nLayers, int nTokens, int nHead, int nHeadKv, int headDim, int ffnLen,
-    float ropeFreqBase, const int ropeSections[4], float rmsEps) {
+    const std::vector<struct ggml_tensor*>& deepstack,
+    const GrootTextWeights& w, int nLayers, int nTokens, int nHead, int nHeadKv,
+    int headDim, int ffnLen, float ropeFreqBase, const int ropeSections[4],
+    float rmsEps) {
   if (ctx == nullptr || inputsEmbeds == nullptr || positions == nullptr ||
       mask == nullptr || static_cast<int>(w.blocks.size()) < nLayers) {
     return nullptr;
@@ -901,8 +975,18 @@ struct ggml_tensor* grootBuildTextDecoderGraph(
 
     struct ggml_tensor* nh = grootRmsNorm(ctx, cur, bw.attn_norm_w, rmsEps);
     struct ggml_tensor* attn = grootTextAttention(
-        ctx, nh, positions, mask, bw, nHead, nHeadKv, headDim, nTokens,
-        ropeFreqBase, ropeSections, rmsEps);
+        ctx,
+        nh,
+        positions,
+        mask,
+        bw,
+        nHead,
+        nHeadKv,
+        headDim,
+        nTokens,
+        ropeFreqBase,
+        ropeSections,
+        rmsEps);
     struct ggml_tensor* ffnInp = ggml_add(ctx, attn, inpSA);
 
     // SwiGLU FFN: down(silu(gate(x)) * up(x)).
@@ -946,7 +1030,8 @@ struct ggml_tensor* grootBuildPatchEmbedLinear(
     return ggml_fp16_to_fp32(static_cast<const ggml_fp16_t*>(t->data)[i]);
   };
 
-  struct ggml_tensor* wlin = ggml_new_tensor_2d(ctx, GGML_TYPE_F32, inFlat, nEmbd);
+  struct ggml_tensor* wlin =
+      ggml_new_tensor_2d(ctx, GGML_TYPE_F32, inFlat, nEmbd);
   auto* wd = static_cast<float*>(wlin->data);
   // conv ne=[pw, ph, C, OC] contiguous: idx = pw + P*(ph + P*(c + C*oc)).
   // linear flat = ((c*T + t)*P + ph)*P + pw.
@@ -957,7 +1042,8 @@ struct ggml_tensor* grootBuildPatchEmbedLinear(
           const size_t src =
               static_cast<size_t>(pw) + patch * (ph + patch * (c + numCh * oc));
           for (int t = 0; t < temporalPatch; ++t) {
-            const int flat = ((c * temporalPatch + t) * patch + ph) * patch + pw;
+            const int flat =
+                ((c * temporalPatch + t) * patch + ph) * patch + pw;
             wd[static_cast<size_t>(oc) * inFlat + flat] = readVal(conv[t], src);
           }
         }
@@ -1048,32 +1134,70 @@ static struct ggml_tensor* grootBuildVisionBlock(
 
   cur = grootLinear(ctx, cur, w.attn_qkv_w, w.attn_qkv_b); // [3*nEmbd, nPos]
   const size_t rowSize = ggml_row_size(cur->type, headDim);
-  struct ggml_tensor* q = ggml_view_3d(
-      ctx, cur, headDim, nHead, nPos, rowSize, cur->nb[1], 0);
+  struct ggml_tensor* q =
+      ggml_view_3d(ctx, cur, headDim, nHead, nPos, rowSize, cur->nb[1], 0);
   struct ggml_tensor* k = ggml_view_3d(
-      ctx, cur, headDim, nHead, nPos, rowSize, cur->nb[1],
+      ctx,
+      cur,
+      headDim,
+      nHead,
+      nPos,
+      rowSize,
+      cur->nb[1],
       ggml_row_size(cur->type, nEmbd));
   struct ggml_tensor* v = ggml_view_3d(
-      ctx, cur, headDim, nHead, nPos, rowSize, cur->nb[1],
+      ctx,
+      cur,
+      headDim,
+      nHead,
+      nPos,
+      rowSize,
+      cur->nb[1],
       ggml_row_size(cur->type, 2 * nEmbd));
 
   int sections[4] = {headDim / 4, headDim / 4, headDim / 4, headDim / 4};
   q = ggml_rope_multi(
-      ctx, q, positions, nullptr, headDim / 2, sections, GGML_ROPE_TYPE_VISION,
-      32768, ropeFreqBase, 1.0f, 0.0f, 1.0f, 32.0f, 1.0f);
+      ctx,
+      q,
+      positions,
+      nullptr,
+      headDim / 2,
+      sections,
+      GGML_ROPE_TYPE_VISION,
+      32768,
+      ropeFreqBase,
+      1.0f,
+      0.0f,
+      1.0f,
+      32.0f,
+      1.0f);
   k = ggml_rope_multi(
-      ctx, k, positions, nullptr, headDim / 2, sections, GGML_ROPE_TYPE_VISION,
-      32768, ropeFreqBase, 1.0f, 0.0f, 1.0f, 32.0f, 1.0f);
+      ctx,
+      k,
+      positions,
+      nullptr,
+      headDim / 2,
+      sections,
+      GGML_ROPE_TYPE_VISION,
+      32768,
+      ropeFreqBase,
+      1.0f,
+      0.0f,
+      1.0f,
+      32.0f,
+      1.0f);
 
-  q = ggml_cont(ctx, ggml_permute(ctx, q, 0, 2, 1, 3)); // [headDim, nPos, nHead]
+  q = ggml_cont(
+      ctx, ggml_permute(ctx, q, 0, 2, 1, 3)); // [headDim, nPos, nHead]
   k = ggml_cont(ctx, ggml_permute(ctx, k, 0, 2, 1, 3));
-  struct ggml_tensor* vt =
-      ggml_cont(ctx, ggml_permute(ctx, v, 1, 2, 0, 3)); // [nPos, headDim, nHead]
+  struct ggml_tensor* vt = ggml_cont(
+      ctx, ggml_permute(ctx, v, 1, 2, 0, 3)); // [nPos, headDim, nHead]
 
   struct ggml_tensor* kq = ggml_mul_mat(ctx, k, q); // [nPos_kv, nPos_q, nHead]
   kq = ggml_soft_max_ext(
       ctx, kq, mask, 1.0f / std::sqrt(static_cast<float>(headDim)), 0.0f);
-  struct ggml_tensor* kqv = ggml_mul_mat(ctx, vt, kq); // [headDim, nPos_q, nHead]
+  struct ggml_tensor* kqv =
+      ggml_mul_mat(ctx, vt, kq); // [headDim, nPos_q, nHead]
   kqv = ggml_permute(ctx, kqv, 0, 2, 1, 3);
   kqv = ggml_cont_2d(ctx, kqv, nEmbd, nPos);
   struct ggml_tensor* attn = grootLinear(ctx, kqv, w.attn_out_w, w.attn_out_b);
@@ -1089,12 +1213,13 @@ static struct ggml_tensor* grootBuildVisionBlock(
 
 // 2×2 patch merger MLP (mm.0 → GELU → mm.2, no gate). `x` ne=[nEmbd, nPos]
 // where consecutive groups of merge² patches form one output token (GR00T's
-// processor already lays patches out in merge order). Returns [outHidden, nPos/m²].
+// processor already lays patches out in merge order). Returns [outHidden,
+// nPos/m²].
 static struct ggml_tensor* grootVisionMerge(
     struct ggml_context* ctx, struct ggml_tensor* x, struct ggml_tensor* fc1W,
-    struct ggml_tensor* fc1B, struct ggml_tensor* fc2W, struct ggml_tensor* fc2B,
-    int nEmbd, int nPos, int mergeFactor, struct ggml_tensor* normW,
-    struct ggml_tensor* normB, float eps) {
+    struct ggml_tensor* fc1B, struct ggml_tensor* fc2W,
+    struct ggml_tensor* fc2B, int nEmbd, int nPos, int mergeFactor,
+    struct ggml_tensor* normW, struct ggml_tensor* normB, float eps) {
   struct ggml_tensor* m =
       ggml_reshape_2d(ctx, x, nEmbd * mergeFactor, nPos / mergeFactor);
   if (normW != nullptr) {
@@ -1130,7 +1255,8 @@ struct ggml_tensor* grootBuildVisionGraph(
   const int mergeFactor = mergeSize * mergeSize;
 
   // ── Patch embed (Linear) + bias ────────────────────────────────────────
-  struct ggml_tensor* inp = ggml_mul_mat(ctx, patchWLin, patchInput); // [nEmbd, nPos]
+  struct ggml_tensor* inp =
+      ggml_mul_mat(ctx, patchWLin, patchInput); // [nEmbd, nPos]
   inp = ggml_add(ctx, inp, grootToF32(ctx, patchBias));
 
   // ── Learned position embedding (Qwen3-VL align-corners bilinear, merge
@@ -1147,8 +1273,17 @@ struct ggml_tensor* grootBuildVisionGraph(
   struct ggml_tensor* cur = inp;
   for (int il = 0; il < static_cast<int>(w.blocks.size()); ++il) {
     cur = grootBuildVisionBlock(
-        ctx, cur, positions, mask, w.blocks[il], nPos, nEmbd, nHead, headDim,
-        eps, ropeFreqBase);
+        ctx,
+        cur,
+        positions,
+        mask,
+        w.blocks[il],
+        nPos,
+        nEmbd,
+        nHead,
+        headDim,
+        eps,
+        ropeFreqBase);
     if (outBlocks != nullptr) {
       outBlocks->push_back(cur);
     }
@@ -1157,8 +1292,18 @@ struct ggml_tensor* grootBuildVisionGraph(
         if (deepstackIndexes[d] == il && d < w.deepstack_mergers.size()) {
           const auto& dm = w.deepstack_mergers[d];
           outDeepstack->push_back(grootVisionMerge(
-              ctx, cur, dm.fc1_w, dm.fc1_b, dm.fc2_w, dm.fc2_b, nEmbd, nPos,
-              mergeFactor, dm.norm_w, dm.norm_b, eps));
+              ctx,
+              cur,
+              dm.fc1_w,
+              dm.fc1_b,
+              dm.fc2_w,
+              dm.fc2_b,
+              nEmbd,
+              nPos,
+              mergeFactor,
+              dm.norm_w,
+              dm.norm_b,
+              eps));
         }
       }
     }
@@ -1167,18 +1312,38 @@ struct ggml_tensor* grootBuildVisionGraph(
   // ── post-LayerNorm → 2×2 merge projection (mm.0 → GELU → mm.2). ──────────
   cur = grootLayerNorm(ctx, cur, w.post_ln_w, w.post_ln_b, eps);
   return grootVisionMerge(
-      ctx, cur, w.mm_0_w, w.mm_0_b, w.mm_2_w, w.mm_2_b, nEmbd, nPos, mergeFactor,
-      /*normW=*/nullptr, /*normB=*/nullptr, eps);
+      ctx,
+      cur,
+      w.mm_0_w,
+      w.mm_0_b,
+      w.mm_2_w,
+      w.mm_2_b,
+      nEmbd,
+      nPos,
+      mergeFactor,
+      /*normW=*/nullptr,
+      /*normB=*/nullptr,
+      eps);
 }
 
-// Test hook: run a single vision block in isolation (see test_groot_m4_5_vision).
+// Test hook: run a single vision block in isolation (see
+// test_groot_m4_5_vision).
 struct ggml_tensor* grootBuildVisionBlockGraph(
     struct ggml_context* ctx, struct ggml_tensor* x,
     struct ggml_tensor* positions, struct ggml_tensor* mask,
     const GrootVisionBlockWeights& w, int nPos, int nEmbd, int nHead,
     int headDim, float eps, float ropeFreqBase) {
   return grootBuildVisionBlock(
-      ctx, x, positions, mask, w, nPos, nEmbd, nHead, headDim, eps,
+      ctx,
+      x,
+      positions,
+      mask,
+      w,
+      nPos,
+      nEmbd,
+      nHead,
+      headDim,
+      eps,
       ropeFreqBase);
 }
 
@@ -1191,9 +1356,11 @@ GrootModel::GrootModel(
   hparams_.action_dim = impl_->max_action_dim;
   hparams_.max_action_dim = impl_->max_action_dim;
   hparams_.max_state_dim = impl_->max_state_dim;
-  hparams_.tokenizer_max_length = 0; // GR00T's tokenization/templating is consumer-side, no fixed length yet
+  hparams_.tokenizer_max_length = 0; // GR00T's tokenization/templating is
+                                     // consumer-side, no fixed length yet
   hparams_.vision_image_size = 256;  // image_target_size from the source config
-  hparams_.num_cameras = 2;          // OXE_DROID: exterior_image_1_left + wrist_image_left
+  hparams_.num_cameras =
+      2; // OXE_DROID: exterior_image_1_left + wrist_image_left
   hparams_.state_input_mode = VlaHparamsGeneric::StateInputMode::Continuous;
   // Images arrive pre-patchified from Gr00tPolicy (see infer()'s contract),
   // not as raw pixels — the JS validator branches on this.
@@ -1202,13 +1369,9 @@ GrootModel::GrootModel(
 
 GrootModel::~GrootModel() = default;
 
-std::string GrootModel::backendName() const {
-  return impl_->backend_name;
-}
+std::string GrootModel::backendName() const { return impl_->backend_name; }
 
-bool GrootModel::hasGpu() const {
-  return impl_->has_gpu;
-}
+bool GrootModel::hasGpu() const { return impl_->has_gpu; }
 
 bool GrootModel::infer(
     const float** images, int nImages, int imgWidth, int imgHeight,
@@ -1242,44 +1405,44 @@ bool GrootModel::infer(
   if (nImages < 1 || imgWidth <= 0 || imgWidth != imgHeight) {
     return false;
   }
-  const int patchGrid = imgWidth / m.vision_patch_size;    // 256/16 = 16
-  const int merge = m.vision_spatial_merge_size;           // 2
+  const int patchGrid = imgWidth / m.vision_patch_size; // 256/16 = 16
+  const int merge = m.vision_spatial_merge_size;        // 2
   if (patchGrid <= 0 || merge <= 0 || patchGrid % merge != 0) {
     return false;
   }
-  const int mergedGrid = patchGrid / merge;                // 8
-  const int patchesPerImg = patchGrid * patchGrid;         // 256
-  const int inFlat =
-      3 * m.vision_temporal_patch_size * m.vision_patch_size * m.vision_patch_size; // 1536
-  const int nVpos = nImages * patchesPerImg;               // 1024
-  const int mergedPerImg = mergedGrid * mergedGrid;        // 64
-  const int nMerged = nImages * mergedPerImg;              // 256
-  const int T = langLen;                                   // 280
-  const int DIM = m.text_hidden_size;                      // 2048
-  const int outHidden = m.vision_out_hidden_size;          // 2048
-  const int ADIM = m.input_embedding_dim;                  // 1536
-  const int nAct = m.action_horizon;                       // 40
-  const int actDim = m.max_action_dim;                     // 132
-  const int nSteps = m.num_inference_timesteps;            // 4
+  const int mergedGrid = patchGrid / merge;        // 8
+  const int patchesPerImg = patchGrid * patchGrid; // 256
+  const int inFlat = 3 * m.vision_temporal_patch_size * m.vision_patch_size *
+                     m.vision_patch_size;           // 1536
+  const int nVpos = nImages * patchesPerImg;        // 1024
+  const int mergedPerImg = mergedGrid * mergedGrid; // 64
+  const int nMerged = nImages * mergedPerImg;       // 256
+  const int nTok = langLen;                         // 280
+  const int hiddenDim = m.text_hidden_size;         // 2048
+  const int outHidden = m.vision_out_hidden_size;   // 2048
+  const int actInDim = m.input_embedding_dim;       // 1536
+  const int nAct = m.action_horizon;                // 40
+  const int actDim = m.max_action_dim;              // 132
+  const int nSteps = m.num_inference_timesteps;     // 4
   const int nDeep = static_cast<int>(m.vision_deepstack_indexes.size());
   const int vHeadDim = m.vision_hidden_size / m.vision_num_heads; // 64
-  constexpr float VISION_ROPE_BASE = 10000.0f;
-  constexpr float VISION_EPS = 1e-6f;
-  constexpr float VLF_EPS = 1e-5f;
-  constexpr float DIT_EPS = 1e-5f;
-  constexpr int TIMESTEP_BUCKETS = 1000; // config num_timestep_buckets
+  constexpr float visionRopeBase = 10000.0f;
+  constexpr float visionEps = 1e-6f;
+  constexpr float vlfEps = 1e-5f;
+  constexpr float ditEps = 1e-5f;
+  constexpr int timestepBuckets = 1000; // config num_timestep_buckets
 
   for (int i = 0; i < nImages; ++i) {
     if (images[i] == nullptr) {
       return false;
     }
   }
-  if (stateDim != m.max_state_dim || outHidden != DIM) {
+  if (stateDim != m.max_state_dim || outHidden != hiddenDim) {
     return false;
   }
   // The prompt must carry exactly one image-placeholder token per merged patch.
   int nImgTok = 0;
-  for (int t = 0; t < T; ++t) {
+  for (int t = 0; t < nTok; ++t) {
     if (langTokens[t] == m.image_token_id) {
       ++nImgTok;
     }
@@ -1303,8 +1466,13 @@ bool GrootModel::infer(
       return false;
     }
     struct ggml_tensor* wlin = grootBuildPatchEmbedLinear(
-        c, m.vision.patch_embd_w, m.vision.patch_embd_w1, m.vision_hidden_size,
-        3, m.vision_temporal_patch_size, m.vision_patch_size);
+        c,
+        m.vision.patch_embd_w,
+        m.vision.patch_embd_w1,
+        m.vision_hidden_size,
+        3,
+        m.vision_temporal_patch_size,
+        m.vision_patch_size);
     if (wlin == nullptr) {
       ggml_free(c);
       return false;
@@ -1354,10 +1522,26 @@ bool GrootModel::infer(
     }
     std::vector<struct ggml_tensor*> deep;
     struct ggml_tensor* vout = grootBuildVisionGraph(
-        c, pin, wlin, m.vision.patch_embd_b, m.vision.position_embd, pos, mask,
-        m.vision, nImages, patchGrid, patchGrid, m.vision_hidden_size,
-        m.vision_num_heads, vHeadDim, merge, m.vision_num_position_embeddings,
-        outHidden, VISION_EPS, VISION_ROPE_BASE, m.vision_deepstack_indexes,
+        c,
+        pin,
+        wlin,
+        m.vision.patch_embd_b,
+        m.vision.position_embd,
+        pos,
+        mask,
+        m.vision,
+        nImages,
+        patchGrid,
+        patchGrid,
+        m.vision_hidden_size,
+        m.vision_num_heads,
+        vHeadDim,
+        merge,
+        m.vision_num_position_embeddings,
+        outHidden,
+        visionEps,
+        visionRopeBase,
+        m.vision_deepstack_indexes,
         &deep);
     if (vout == nullptr) {
       ggml_free(c);
@@ -1384,10 +1568,10 @@ bool GrootModel::infer(
 
   // ── Phase 2: text embeds (get_rows + vision splice) → text decoder ──────
   const auto tPrefillStart = std::chrono::steady_clock::now();
-  std::vector<float> myBackbone(static_cast<size_t>(T) * DIM);
+  std::vector<float> myBackbone(static_cast<size_t>(nTok) * hiddenDim);
   {
     // 2a — token embeddings via get_rows(token_embd, langTokens), cast to F32.
-    std::vector<float> embeds(static_cast<size_t>(T) * DIM);
+    std::vector<float> embeds(static_cast<size_t>(nTok) * hiddenDim);
     {
       const size_t mem = size_t(512) * 1024u * 1024u;
       std::vector<uint8_t> buf(mem);
@@ -1396,8 +1580,9 @@ bool GrootModel::infer(
       if (c == nullptr) {
         return false;
       }
-      struct ggml_tensor* ids = ggml_new_tensor_1d(c, GGML_TYPE_I32, T);
-      std::memcpy(ids->data, langTokens, static_cast<size_t>(T) * sizeof(int32_t));
+      struct ggml_tensor* ids = ggml_new_tensor_1d(c, GGML_TYPE_I32, nTok);
+      std::memcpy(
+          ids->data, langTokens, static_cast<size_t>(nTok) * sizeof(int32_t));
       struct ggml_tensor* emb = ggml_get_rows(c, m.text.token_embd_w, ids);
       emb = grootToF32(c, emb);
       struct ggml_cgraph* gf = ggml_new_graph_custom(c, 512, false);
@@ -1412,12 +1597,12 @@ bool GrootModel::infer(
     // Splice MY vision embeds at image-placeholder positions (in appearance
     // order, matching camera order in `images`).
     int img = 0;
-    for (int t = 0; t < T; ++t) {
+    for (int t = 0; t < nTok; ++t) {
       if (langTokens[t] == m.image_token_id) {
         std::memcpy(
-            &embeds[static_cast<size_t>(t) * DIM],
+            &embeds[static_cast<size_t>(t) * hiddenDim],
             &myVision[static_cast<size_t>(img) * outHidden],
-            static_cast<size_t>(DIM) * sizeof(float));
+            static_cast<size_t>(hiddenDim) * sizeof(float));
         ++img;
       }
     }
@@ -1430,44 +1615,61 @@ bool GrootModel::infer(
     if (c == nullptr) {
       return false;
     }
-    struct ggml_tensor* inpE = ggml_new_tensor_2d(c, GGML_TYPE_F32, DIM, T);
+    struct ggml_tensor* inpE =
+        ggml_new_tensor_2d(c, GGML_TYPE_F32, hiddenDim, nTok);
     std::memcpy(inpE->data, embeds.data(), embeds.size() * sizeof(float));
-    // Derived M-RoPE position ids (axis-major [4][T]).
-    struct ggml_tensor* posT = ggml_new_tensor_1d(c, GGML_TYPE_I32, T * 4);
+    // Derived M-RoPE position ids (axis-major [4][nTok]).
+    struct ggml_tensor* posT = ggml_new_tensor_1d(c, GGML_TYPE_I32, nTok * 4);
     grootDeriveMRopePositions(
-        langTokens, T, m.image_token_id, mergedGrid, mergedGrid,
+        langTokens,
+        nTok,
+        m.image_token_id,
+        mergedGrid,
+        mergedGrid,
         static_cast<int32_t*>(posT->data));
     // Causal mask over valid tokens.
-    struct ggml_tensor* mask = ggml_new_tensor_2d(c, GGML_TYPE_F32, T, T);
+    struct ggml_tensor* mask = ggml_new_tensor_2d(c, GGML_TYPE_F32, nTok, nTok);
     auto* mp = static_cast<float*>(mask->data);
-    for (int q = 0; q < T; ++q) {
-      for (int s = 0; s < T; ++s) {
-        mp[size_t(q) * T + s] =
-            (s <= q && langMask[s]) ? 0.0f : -INFINITY;
+    for (int q = 0; q < nTok; ++q) {
+      for (int s = 0; s < nTok; ++s) {
+        mp[size_t(q) * nTok + s] = (s <= q && langMask[s]) ? 0.0f : -INFINITY;
       }
     }
     // Deepstack features scattered to image positions, zero elsewhere.
     std::vector<struct ggml_tensor*> ds(nDeep, nullptr);
     for (int i = 0; i < nDeep; ++i) {
-      struct ggml_tensor* d = ggml_new_tensor_2d(c, GGML_TYPE_F32, DIM, T);
+      struct ggml_tensor* d =
+          ggml_new_tensor_2d(c, GGML_TYPE_F32, hiddenDim, nTok);
       auto* dp = static_cast<float*>(d->data);
-      std::memset(dp, 0, static_cast<size_t>(DIM) * T * sizeof(float));
+      std::memset(dp, 0, static_cast<size_t>(hiddenDim) * nTok * sizeof(float));
       int im = 0;
-      for (int t = 0; t < T; ++t) {
+      for (int t = 0; t < nTok; ++t) {
         if (langTokens[t] == m.image_token_id) {
           std::memcpy(
-              &dp[static_cast<size_t>(t) * DIM],
-              &myDeep[i][static_cast<size_t>(im) * DIM],
-              static_cast<size_t>(DIM) * sizeof(float));
+              &dp[static_cast<size_t>(t) * hiddenDim],
+              &myDeep[i][static_cast<size_t>(im) * hiddenDim],
+              static_cast<size_t>(hiddenDim) * sizeof(float));
           ++im;
         }
       }
       ds[i] = d;
     }
     struct ggml_tensor* out = grootBuildTextDecoderGraph(
-        c, inpE, posT, mask, ds, m.text, m.text_num_layers, T, m.text_num_heads,
-        m.text_num_kv_heads, m.text_head_dim, m.text_ffn_length,
-        m.text_rope_freq_base, m.text_rope_sections, m.text_rms_norm_eps);
+        c,
+        inpE,
+        posT,
+        mask,
+        ds,
+        m.text,
+        m.text_num_layers,
+        nTok,
+        m.text_num_heads,
+        m.text_num_kv_heads,
+        m.text_head_dim,
+        m.text_ffn_length,
+        m.text_rope_freq_base,
+        m.text_rope_sections,
+        m.text_rms_norm_eps);
     if (out == nullptr) {
       ggml_free(c);
       return false;
@@ -1478,14 +1680,15 @@ bool GrootModel::infer(
       ggml_free(c);
       return false;
     }
-    std::memcpy(myBackbone.data(), out->data, myBackbone.size() * sizeof(float));
+    std::memcpy(
+        myBackbone.data(), out->data, myBackbone.size() * sizeof(float));
     ggml_free(c);
   }
   const auto tPrefillEnd = std::chrono::steady_clock::now();
 
   // ── Phase 3: VL fusion + state encoder (features reused every step) ─────
-  std::vector<float> myVl(static_cast<size_t>(T) * DIM);
-  std::vector<float> myState(static_cast<size_t>(ADIM));
+  std::vector<float> myVl(static_cast<size_t>(nTok) * hiddenDim);
+  std::vector<float> myState(static_cast<size_t>(actInDim));
   {
     const size_t mem = size_t(2) * 1024u * 1024u * 1024u;
     std::vector<uint8_t> buf(mem);
@@ -1494,20 +1697,30 @@ bool GrootModel::infer(
     if (c == nullptr) {
       return false;
     }
-    struct ggml_tensor* bb = ggml_new_tensor_2d(c, GGML_TYPE_F32, DIM, T);
+    struct ggml_tensor* bb =
+        ggml_new_tensor_2d(c, GGML_TYPE_F32, hiddenDim, nTok);
     std::memcpy(bb->data, myBackbone.data(), myBackbone.size() * sizeof(float));
     GrootVlfusionOutputs vlo = grootBuildVlfusionGraph(
-        c, bb, m.vlfusion, T, DIM, m.vlfusion_num_heads, m.vlfusion_head_dim,
-        VLF_EPS);
+        c,
+        bb,
+        m.vlfusion,
+        nTok,
+        hiddenDim,
+        m.vlfusion_num_heads,
+        m.vlfusion_head_dim,
+        vlfEps);
     if (vlo.fusion_out == nullptr) {
       ggml_free(c);
       return false;
     }
     struct ggml_tensor* st =
         ggml_new_tensor_2d(c, GGML_TYPE_F32, m.max_state_dim, 1);
-    std::memcpy(st->data, state, static_cast<size_t>(m.max_state_dim) * sizeof(float));
+    std::memcpy(
+        st->data, state, static_cast<size_t>(m.max_state_dim) * sizeof(float));
     struct ggml_tensor* sf = grootBuildCategoryMlpGraph(
-        c, st, m.embodiment.state_encoder_layer1,
+        c,
+        st,
+        m.embodiment.state_encoder_layer1,
         m.embodiment.state_encoder_layer2);
     if (sf == nullptr) {
       ggml_free(c);
@@ -1527,13 +1740,12 @@ bool GrootModel::infer(
 
   // ── Phase 4: 4-step Euler flow-matching loop ────────────────────────────
   const auto tOdeStart = std::chrono::steady_clock::now();
-  std::vector<float> actions(
-      static_cast<size_t>(nAct) * actDim);
+  std::vector<float> actions(static_cast<size_t>(nAct) * actDim);
   std::memcpy(actions.data(), noise, actions.size() * sizeof(float));
   const float dt = 1.0f / static_cast<float>(nSteps);
   for (int step = 0; step < nSteps; ++step) {
     const float bucket =
-        static_cast<float>(step) * TIMESTEP_BUCKETS / static_cast<float>(nSteps);
+        static_cast<float>(step) * timestepBuckets / static_cast<float>(nSteps);
     const size_t mem = size_t(2) * 1024u * 1024u * 1024u;
     std::vector<uint8_t> buf(mem);
     struct ggml_init_params ip{mem, buf.data(), false};
@@ -1545,59 +1757,91 @@ bool GrootModel::infer(
         ggml_new_tensor_2d(c, GGML_TYPE_F32, actDim, nAct);
     std::memcpy(actT->data, actions.data(), actions.size() * sizeof(float));
     struct ggml_tensor* stateFeat =
-        ggml_new_tensor_2d(c, GGML_TYPE_F32, ADIM, 1);
-    std::memcpy(stateFeat->data, myState.data(), myState.size() * sizeof(float));
-    struct ggml_tensor* vl = ggml_new_tensor_2d(c, GGML_TYPE_F32, DIM, T);
+        ggml_new_tensor_2d(c, GGML_TYPE_F32, actInDim, 1);
+    std::memcpy(
+        stateFeat->data, myState.data(), myState.size() * sizeof(float));
+    struct ggml_tensor* vl =
+        ggml_new_tensor_2d(c, GGML_TYPE_F32, hiddenDim, nTok);
     std::memcpy(vl->data, myVl.data(), myVl.size() * sizeof(float));
-    // Timestep embedding: diffusers sinusoidal proj (CPU) → 2-layer MLP (graph).
-    std::vector<float> proj_buf(m.timestep_proj_channels);
-    grootComputeTimestepProj(bucket, m.timestep_proj_channels, proj_buf.data());
+    // Timestep embedding: diffusers sinusoidal proj (CPU) → 2-layer MLP
+    // (graph).
+    std::vector<float> projBuf(m.timestep_proj_channels);
+    grootComputeTimestepProj(bucket, m.timestep_proj_channels, projBuf.data());
     struct ggml_tensor* proj =
         ggml_new_tensor_1d(c, GGML_TYPE_F32, m.timestep_proj_channels);
-    std::memcpy(proj->data, proj_buf.data(), proj_buf.size() * sizeof(float));
+    std::memcpy(proj->data, projBuf.data(), projBuf.size() * sizeof(float));
     struct ggml_tensor* temb = grootBuildTimestepMlpGraph(
-        c, proj, m.dit.timestep_embedder_l1_w, m.dit.timestep_embedder_l1_b,
-        m.dit.timestep_embedder_l2_w, m.dit.timestep_embedder_l2_b);
+        c,
+        proj,
+        m.dit.timestep_embedder_l1_w,
+        m.dit.timestep_embedder_l1_b,
+        m.dit.timestep_embedder_l2_w,
+        m.dit.timestep_embedder_l2_b);
     // Action-encoder tau (sinusoidal, CPU).
-    std::vector<float> tau_buf(ADIM);
-    grootComputeActionTauEnc(bucket, ADIM, tau_buf.data());
-    struct ggml_tensor* tau = ggml_new_tensor_1d(c, GGML_TYPE_F32, ADIM);
-    std::memcpy(tau->data, tau_buf.data(), tau_buf.size() * sizeof(float));
+    std::vector<float> tauBuf(actInDim);
+    grootComputeActionTauEnc(bucket, actInDim, tauBuf.data());
+    struct ggml_tensor* tau = ggml_new_tensor_1d(c, GGML_TYPE_F32, actInDim);
+    std::memcpy(tau->data, tauBuf.data(), tauBuf.size() * sizeof(float));
     // Cross-attention key masks: even-block image vs text, over valid tokens.
     const int tTok = nAct + 1;
     struct ggml_tensor* imMask =
-        ggml_new_tensor_2d(c, GGML_TYPE_F32, T, tTok);
+        ggml_new_tensor_2d(c, GGML_TYPE_F32, nTok, tTok);
     struct ggml_tensor* txMask =
-        ggml_new_tensor_2d(c, GGML_TYPE_F32, T, tTok);
+        ggml_new_tensor_2d(c, GGML_TYPE_F32, nTok, tTok);
     auto* imp = static_cast<float*>(imMask->data);
     auto* txp = static_cast<float*>(txMask->data);
     for (int q = 0; q < tTok; ++q) {
-      for (int s = 0; s < T; ++s) {
+      for (int s = 0; s < nTok; ++s) {
         const bool valid = langMask[s];
         const bool isImg = langTokens[s] == m.image_token_id;
-        imp[size_t(q) * T + s] = (valid && isImg) ? 0.0f : -INFINITY;
-        txp[size_t(q) * T + s] = (valid && !isImg) ? 0.0f : -INFINITY;
+        imp[size_t(q) * nTok + s] = (valid && isImg) ? 0.0f : -INFINITY;
+        txp[size_t(q) * nTok + s] = (valid && !isImg) ? 0.0f : -INFINITY;
       }
     }
     struct ggml_tensor* af = grootBuildActionEncoderGraph(
-        c, actT, tau, m.embodiment.action_encoder_w1,
-        m.embodiment.action_encoder_w2, m.embodiment.action_encoder_w3, ADIM,
+        c,
+        actT,
+        tau,
+        m.embodiment.action_encoder_w1,
+        m.embodiment.action_encoder_w2,
+        m.embodiment.action_encoder_w3,
+        actInDim,
         nAct);
     struct ggml_tensor* pemb = ggml_view_2d(
-        c, m.dit.position_embedding_w, ADIM, nAct,
-        m.dit.position_embedding_w->nb[1], 0);
+        c,
+        m.dit.position_embedding_w,
+        actInDim,
+        nAct,
+        m.dit.position_embedding_w->nb[1],
+        0);
     af = ggml_add(c, af, pemb);
     struct ggml_tensor* sa = ggml_concat(c, stateFeat, af, 1);
     struct ggml_tensor* out = grootBuildDitGraph(
-        c, sa, temb, vl, imMask, txMask, m.dit, m.dit_num_layers,
-        m.dit_num_heads, m.dit_head_dim, ADIM, DIM, m.dit_ffn_inner,
-        m.dit_output_dim, m.dit_attend_text_every_n_blocks, DIT_EPS, nullptr);
+        c,
+        sa,
+        temb,
+        vl,
+        imMask,
+        txMask,
+        m.dit,
+        m.dit_num_layers,
+        m.dit_num_heads,
+        m.dit_head_dim,
+        actInDim,
+        hiddenDim,
+        m.dit_ffn_inner,
+        m.dit_output_dim,
+        m.dit_attend_text_every_n_blocks,
+        ditEps,
+        nullptr);
     if (out == nullptr) {
       ggml_free(c);
       return false;
     }
     struct ggml_tensor* pred = grootBuildCategoryMlpGraph(
-        c, out, m.embodiment.action_decoder_layer1,
+        c,
+        out,
+        m.embodiment.action_decoder_layer1,
         m.embodiment.action_decoder_layer2);
     // Drop the leading state token → velocity [actDim, nAct].
     struct ggml_tensor* vel = ggml_cont(

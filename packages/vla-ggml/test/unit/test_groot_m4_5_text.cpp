@@ -5,8 +5,9 @@
 // (select_layer=16, NO final norm). The post-norm hidden_states.16 is a
 // different tensor (cos 0.11) — do not gate on it.
 // GOTCHA: the residual carries a massive activation (token 0, dim 1793, ≈15296)
-// that dominates a global cosine, so we also report cos with that outlier zeroed
-// to prove the small-magnitude channels are right, not just masked by it.
+// that dominates a global cosine, so we also report cos with that outlier
+// zeroed to prove the small-magnitude channels are right, not just masked by
+// it.
 
 #include <algorithm>
 #include <cmath>
@@ -68,45 +69,45 @@ struct ggml_tensor* gt(struct ggml_context* c, const std::string& n) {
 } // namespace
 
 TEST(GrootM4_5, TextDecoderMatchesPytorch) {
-  const char* gguf_path = envOrNull("GROOT_TEST_GGUF");
-  const char* act_path = envOrNull("GROOT_TEST_ACTIVATIONS_V3");
-  if (gguf_path == nullptr || act_path == nullptr) {
+  const char* ggufPath = envOrNull("GROOT_TEST_GGUF");
+  const char* actPath = envOrNull("GROOT_TEST_ACTIVATIONS_V3");
+  if (ggufPath == nullptr || actPath == nullptr) {
     GTEST_SKIP() << "Set GROOT_TEST_GGUF and GROOT_TEST_ACTIVATIONS_V3 to run "
                     "the M4.5 text-decoder parity test.";
   }
 
   qvac_vla_safetensors_lite::Reader act;
-  ASSERT_NO_THROW(act.open(act_path));
+  ASSERT_NO_THROW(act.open(actPath));
 
-  struct ggml_context* ctx_w = nullptr;
+  struct ggml_context* ctxW = nullptr;
   struct gguf_init_params gp{};
   gp.no_alloc = false;
-  gp.ctx = &ctx_w;
-  struct gguf_context* gguf = gguf_init_from_file(gguf_path, gp);
+  gp.ctx = &ctxW;
+  struct gguf_context* gguf = gguf_init_from_file(ggufPath, gp);
   ASSERT_NE(gguf, nullptr);
-  ASSERT_NE(ctx_w, nullptr);
+  ASSERT_NE(ctxW, nullptr);
 
   using namespace qvac_lib_infer_vla_ggml;
 
   // ── Weights ────────────────────────────────────────────────────────────
   GrootTextWeights tw{};
-  tw.token_embd_w = gt(ctx_w, "token_embd.weight");
-  tw.output_norm_w = gt(ctx_w, "output_norm.weight");
+  tw.token_embd_w = gt(ctxW, "token_embd.weight");
+  tw.output_norm_w = gt(ctxW, "output_norm.weight");
   tw.blocks.resize(N_LAYERS);
   for (int i = 0; i < N_LAYERS; ++i) {
     const std::string b = "blk." + std::to_string(i);
     auto& bw = tw.blocks[i];
-    bw.attn_norm_w = gt(ctx_w, b + ".attn_norm.weight");
-    bw.attn_q_w = gt(ctx_w, b + ".attn_q.weight");
-    bw.attn_k_w = gt(ctx_w, b + ".attn_k.weight");
-    bw.attn_v_w = gt(ctx_w, b + ".attn_v.weight");
-    bw.attn_output_w = gt(ctx_w, b + ".attn_output.weight");
-    bw.attn_q_norm_w = gt(ctx_w, b + ".attn_q_norm.weight");
-    bw.attn_k_norm_w = gt(ctx_w, b + ".attn_k_norm.weight");
-    bw.ffn_norm_w = gt(ctx_w, b + ".ffn_norm.weight");
-    bw.ffn_gate_w = gt(ctx_w, b + ".ffn_gate.weight");
-    bw.ffn_up_w = gt(ctx_w, b + ".ffn_up.weight");
-    bw.ffn_down_w = gt(ctx_w, b + ".ffn_down.weight");
+    bw.attn_norm_w = gt(ctxW, b + ".attn_norm.weight");
+    bw.attn_q_w = gt(ctxW, b + ".attn_q.weight");
+    bw.attn_k_w = gt(ctxW, b + ".attn_k.weight");
+    bw.attn_v_w = gt(ctxW, b + ".attn_v.weight");
+    bw.attn_output_w = gt(ctxW, b + ".attn_output.weight");
+    bw.attn_q_norm_w = gt(ctxW, b + ".attn_q_norm.weight");
+    bw.attn_k_norm_w = gt(ctxW, b + ".attn_k_norm.weight");
+    bw.ffn_norm_w = gt(ctxW, b + ".ffn_norm.weight");
+    bw.ffn_gate_w = gt(ctxW, b + ".ffn_gate.weight");
+    bw.ffn_up_w = gt(ctxW, b + ".ffn_up.weight");
+    bw.ffn_down_w = gt(ctxW, b + ".ffn_down.weight");
     ASSERT_NE(bw.ffn_down_w, nullptr) << "missing weights for " << b;
   }
 
@@ -114,16 +115,16 @@ TEST(GrootM4_5, TextDecoderMatchesPytorch) {
   const std::vector<float> embeds =
       act.readF32("text_model_input.call0.kwargs.inputs_embeds");
   ASSERT_EQ(embeds.size(), size_t(T_TOK) * DIM);
-  const std::vector<float> pos_ids =
+  const std::vector<float> posIds =
       act.readF32("text_model_input.call0.kwargs.position_ids"); // [3,1,280]
-  ASSERT_EQ(pos_ids.size(), size_t(3) * T_TOK);
+  ASSERT_EQ(posIds.size(), size_t(3) * T_TOK);
   const std::vector<float> vpm =
       act.readF32("text_model_input.call0.kwargs.visual_pos_masks"); // [1,280]
   ASSERT_EQ(vpm.size(), size_t(T_TOK));
 
-  std::vector<std::vector<float>> ds_src(3);
+  std::vector<std::vector<float>> dsSrc(3);
   for (int i = 0; i < 3; ++i) {
-    ds_src[i] = act.readF32(
+    dsSrc[i] = act.readF32(
         "text_model_input.call0.kwargs.deepstack_visual_embeds." +
         std::to_string(i)); // [256, 2048]
   }
@@ -149,10 +150,11 @@ TEST(GrootM4_5, TextDecoderMatchesPytorch) {
   auto* pp = static_cast<int32_t*>(positions->data);
   for (int ax = 0; ax < 3; ++ax) {
     for (int t = 0; t < T_TOK; ++t) {
-      pp[ax * T_TOK + t] = static_cast<int32_t>(pos_ids[ax * T_TOK + t]);
+      pp[ax * T_TOK + t] = static_cast<int32_t>(posIds[ax * T_TOK + t]);
     }
   }
-  for (int t = 0; t < T_TOK; ++t) pp[3 * T_TOK + t] = 0;
+  for (int t = 0; t < T_TOK; ++t)
+    pp[3 * T_TOK + t] = 0;
 
   // Causal additive mask [T_kv, T_q]: 0 if kv<=q else -inf.
   struct ggml_tensor* mask = ggml_new_tensor_2d(c, GGML_TYPE_F32, T_TOK, T_TOK);
@@ -173,8 +175,10 @@ TEST(GrootM4_5, TextDecoderMatchesPytorch) {
     int img = 0;
     for (int t = 0; t < T_TOK; ++t) {
       if (vpm[t] > 0.5f) {
-        std::memcpy(&dp[size_t(t) * DIM], &ds_src[i][size_t(img) * DIM],
-                    DIM * sizeof(float));
+        std::memcpy(
+            &dp[size_t(t) * DIM],
+            &dsSrc[i][size_t(img) * DIM],
+            DIM * sizeof(float));
         ++img;
       }
     }
@@ -184,8 +188,21 @@ TEST(GrootM4_5, TextDecoderMatchesPytorch) {
 
   const int sections[4] = {24, 20, 20, 0};
   struct ggml_tensor* out = grootBuildTextDecoderGraph(
-      c, inpE, positions, mask, deepstack, tw, N_LAYERS, T_TOK, N_HEAD,
-      N_HEAD_KV, HEAD_DIM, FFN_LEN, ROPE_FREQ_BASE, sections, RMS_EPS);
+      c,
+      inpE,
+      positions,
+      mask,
+      deepstack,
+      tw,
+      N_LAYERS,
+      T_TOK,
+      N_HEAD,
+      N_HEAD_KV,
+      HEAD_DIM,
+      FFN_LEN,
+      ROPE_FREQ_BASE,
+      sections,
+      RMS_EPS);
   ASSERT_NE(out, nullptr);
   ASSERT_EQ(out->ne[0], DIM);
   ASSERT_EQ(out->ne[1], T_TOK);
@@ -204,7 +221,10 @@ TEST(GrootM4_5, TextDecoderMatchesPytorch) {
   size_t argmax = 0;
   float amax = 0.0f;
   for (size_t i = 0; i < n; ++i) {
-    if (std::fabs(expected[i]) > amax) { amax = std::fabs(expected[i]); argmax = i; }
+    if (std::fabs(expected[i]) > amax) {
+      amax = std::fabs(expected[i]);
+      argmax = i;
+    }
   }
   std::vector<float> ga(got, got + n), ea = expected;
   ga[argmax] = 0.0f;
@@ -220,5 +240,5 @@ TEST(GrootM4_5, TextDecoderMatchesPytorch) {
 
   ggml_free(c);
   gguf_free(gguf);
-  ggml_free(ctx_w);
+  ggml_free(ctxW);
 }

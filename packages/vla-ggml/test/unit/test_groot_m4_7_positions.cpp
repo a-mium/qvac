@@ -31,13 +31,13 @@ const char* envOrNull(const char* n) {
 } // namespace
 
 TEST(GrootM4_7, MRopePositionsMatchPytorch) {
-  const char* act_path = envOrNull("GROOT_TEST_ACTIVATIONS_V3");
-  if (act_path == nullptr) {
+  const char* actPath = envOrNull("GROOT_TEST_ACTIVATIONS_V3");
+  if (actPath == nullptr) {
     GTEST_SKIP() << "Set GROOT_TEST_ACTIVATIONS_V3 to run the M4.7 position-id "
                     "parity test.";
   }
   qvac_vla_safetensors_lite::Reader act;
-  ASSERT_NO_THROW(act.open(act_path));
+  ASSERT_NO_THROW(act.open(actPath));
 
   // visual_pos_masks [1,280] — 1 at image-token positions.
   const std::vector<float> vpm =
@@ -57,7 +57,11 @@ TEST(GrootM4_7, MRopePositionsMatchPytorch) {
 
   std::vector<int32_t> got(static_cast<size_t>(T_TOK) * 4);
   qvac_lib_infer_vla_ggml::grootDeriveMRopePositions(
-      tokens.data(), T_TOK, IMAGE_TOKEN_ID, MERGED_GRID, MERGED_GRID,
+      tokens.data(),
+      T_TOK,
+      IMAGE_TOKEN_ID,
+      MERGED_GRID,
+      MERGED_GRID,
       got.data());
 
   // Compare the 3 real axes exactly (integer, no tolerance).
@@ -68,7 +72,8 @@ TEST(GrootM4_7, MRopePositionsMatchPytorch) {
       const int expv = static_cast<int>(expPos[ax * T_TOK + t]);
       const int gotv = got[ax * T_TOK + t];
       if (expv != gotv) {
-        if (firstBad < 0) firstBad = ax * T_TOK + t;
+        if (firstBad < 0)
+          firstBad = ax * T_TOK + t;
         ++mismatches;
       }
     }
