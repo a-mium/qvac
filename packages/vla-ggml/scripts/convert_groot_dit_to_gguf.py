@@ -1,21 +1,15 @@
 """Convert GR00T N1.7-3B's action-head weights (VL fusion + DiT + embodiment MLPs)
-to a GGUF file, single-embodiment-sliced for v1.
+to a GGUF file, single-embodiment-sliced for v1. Covers `action_head.*`; the
+backbone (Qwen3-VL vision + truncated-16-layer text decoder) is converted
+separately via fabric's own convert_hf_to_gguf.py (see _repackage_groot_backbone.py).
 
-The backbone (Qwen3-VL vision + truncated-16-layer text decoder) is converted
-separately by reusing qvac-fabric-llm.cpp's own convert_hf_to_gguf.py against a
-repackaged checkpoint (see _repackage_groot_backbone.py) — that produces two
-standard llama.cpp-format GGUFs (text arch + mmproj vision) using already-
-tested tensor mapping. This script covers everything else: `action_head.*` in
-the source checkpoint.
-
-Embodiment conditioning in the source model (`CategorySpecificLinear`) keeps a
-weight matrix per embodiment (`self.W[cat_ids]`, up to 32). For v1 (single
-embodiment) we slice out exactly one embodiment's row at conversion time and
-store it as a plain dense tensor — no runtime embodiment-ID input is needed by
-the ggml loader.
+Embodiment conditioning (`CategorySpecificLinear`) keeps a weight matrix per
+embodiment (`self.W[cat_ids]`, up to 32). For v1 we slice out one embodiment's row
+at conversion time and store it as a plain dense tensor — no runtime embodiment-ID
+input is needed by the ggml loader.
 
 Real dims (verified against the actual checkpoint's tensor shapes, not
-inferred from the HF config prose — see PR/session notes):
+inferred from the HF config prose):
     hidden_size (action_head)      = 1024
     input_embedding_dim (DiT dim)  = 1536  (= dit_num_heads * dit_head_dim = 32*48)
     backbone_embedding_dim         = 2048  (= vlfusion dim = DiT cross_attention_dim)
@@ -71,14 +65,11 @@ NUM_EMBODIMENTS_TOTAL = 32
 TIMESTEP_PROJ_CHANNELS = 256
 POSITION_EMBED_MAX_LEN = 1024
 
-# Backbone hparams (real Qwen3-VL / Cosmos-Reason2-2B config, truncated text
-# decoder to 16 layers per GR00T's own select_layer). fabric's own
-# convert_hf_to_gguf.py stamps these as `qwen3vl.*`/vision-specific keys into
-# the two backbone GGUF parts, but _merge_groot_gguf.py only copies THIS
-# file's metadata (tensors are copied from all 3 parts, hparams only from
-# here) — so the merged groot.gguf needs its own copy under `groot.*` for
-# groot.cpp's loader to read, consistent with how every other value here
-# comes from GGUF metadata rather than being hardcoded in C++.
+# Backbone hparams (real Qwen3-VL / Cosmos-Reason2-2B config, text decoder
+# truncated to 16 layers per GR00T's select_layer). fabric stamps these as
+# `qwen3vl.*` keys into the backbone parts, but _merge_groot_gguf.py copies
+# hparams only from THIS file — so the merged groot.gguf needs its own copy
+# under `groot.*` for groot.cpp's loader to read.
 TEXT_NUM_LAYERS = 16
 TEXT_HIDDEN_SIZE = 2048
 TEXT_NUM_HEADS = 16
@@ -88,6 +79,9 @@ TEXT_FFN_LENGTH = 6144
 TEXT_VOCAB_SIZE = 151936
 TEXT_ROPE_FREQ_BASE = 5000000
 TEXT_RMS_NORM_EPS = 1e-6
+# Qwen3-VL image placeholder token id. infer() scans langTokens for runs of this
+# id to splice vision embeds and to derive the M-RoPE spatial position ids.
+IMAGE_TOKEN_ID = 151655
 
 VISION_DEPTH = 24
 VISION_HIDDEN_SIZE = 1024
@@ -210,6 +204,7 @@ def main():
     writer.add_uint32("groot.text.head_dim", TEXT_HEAD_DIM)
     writer.add_uint32("groot.text.ffn_length", TEXT_FFN_LENGTH)
     writer.add_uint32("groot.text.vocab_size", TEXT_VOCAB_SIZE)
+    writer.add_uint32("groot.image_token_id", IMAGE_TOKEN_ID)
     writer.add_float32("groot.text.rope_freq_base", float(TEXT_ROPE_FREQ_BASE))
     writer.add_float32("groot.text.rms_norm_eps", TEXT_RMS_NORM_EPS)
 

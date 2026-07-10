@@ -1,29 +1,24 @@
 #pragma once
 
-// GR00T N1.7-3B model implementation (v1: single embodiment, baked in at
-// conversion time — see scripts/convert_groot_dit_to_gguf.py).
+// GR00T N1.7-3B model (v1: single embodiment, baked in at conversion time —
+// see scripts/convert_groot_dit_to_gguf.py).
 //
-// Backbone: Qwen3-VL (Cosmos-Reason2-2B checkpoint), vision tower + text
-// decoder truncated to 16 layers (GR00T's own `select_layer` truncation),
-// graph-building logic ported from qvac-fabric-llm.cpp's
-// tools/mtmd/models/qwen3vl.cpp (vision) and src/models/qwen3vl.cpp (text) —
-// both already correct, cross-backend implementations reused rather than
-// re-derived. GGUF tensor names for the backbone are fabric's own
-// (`v.*`/`blk.*`/`token_embd`/etc, unprefixed) since the converter copies
-// them byte-identical from fabric's own convert_hf_to_gguf.py output.
+// Backbone: Qwen3-VL (Cosmos-Reason2-2B), vision tower + text decoder
+// truncated to 16 layers (GR00T's `select_layer`). Graph logic ported from
+// qvac-fabric-llm.cpp's tools/mtmd/models/qwen3vl.cpp (vision) and
+// src/models/qwen3vl.cpp (text). Backbone GGUF tensor names are fabric's own,
+// unprefixed (`v.*`/`blk.*`/`token_embd`/etc), copied byte-identical from
+// fabric's convert_hf_to_gguf.py.
 //
-// VL fusion + action head: `AlternateVLDiT` (32-layer diffusion transformer,
-// AdaLayerNorm-modulated, alternating self-/cross-attention every
-// `attend_text_every_n_blocks` blocks) and a 4-layer plain-LayerNorm
-// `SelfAttentionTransformer` fusing vision+language backbone features —
-// genuinely new graph-building work, no upstream reference. GGUF tensor
-// names are `dit.*`/`vlfusion.*`/`embodiment.*` (this package's own
-// convention, see convert_groot_dit_to_gguf.py).
+// VL fusion + action head: `AlternateVLDiT` (32-layer AdaLayerNorm diffusion
+// transformer, alternating self-/cross-attention every
+// `attend_text_every_n_blocks`) and a 4-layer plain-LayerNorm
+// `SelfAttentionTransformer` — new graph work, no upstream reference. Tensor
+// names `dit.*`/`vlfusion.*`/`embodiment.*` (this package's own convention).
 //
-// Embodiment conditioning (`CategorySpecificLinear`/`CategorySpecificMLP` in
-// the original model) is sliced to ONE embodiment at conversion time — the
-// `embodiment.*` tensors here are plain dense weights, no runtime
-// embodiment-ID input needed.
+// Embodiment conditioning (`CategorySpecificLinear`/`CategorySpecificMLP`) is
+// sliced to ONE embodiment at conversion time — the `embodiment.*` tensors are
+// plain dense weights, no runtime embodiment-ID input.
 
 #include <memory>
 #include <string>
@@ -36,8 +31,8 @@
 namespace qvac_lib_infer_vla_ggml {
 
 // ── Backbone: Qwen3-VL vision tower ─────────────────────────────────────
-// Tensor names match fabric's convert_hf_to_gguf.py Qwen3VLVisionModel
-// output exactly (ported graph must use the same literal string lookups).
+// Tensor names match fabric's convert_hf_to_gguf.py Qwen3VLVisionModel output
+// exactly (ported graph uses the same literal string lookups).
 
 struct GrootVisionBlockWeights {
   struct ggml_tensor* ln1_w;      // v.blk.N.ln1.weight
@@ -189,21 +184,16 @@ struct GrootEmbodimentWeights {
 };
 
 // ── Sub-graph helpers (milestone-testable) ─────────────────────────────
-// Each graph builder has a standalone entry point so the matching
-// GoogleTest can drive it directly against the Phase 0 oracle activations,
-// without going through GrootModel::infer. Mirrors pi05.hpp's M3.x pattern.
-// Implementations live in groot.cpp; tests under test/unit/test_groot_m*.
+// Each graph builder has a standalone entry point so the matching GoogleTest
+// can drive it against Phase 0 oracle activations without going through
+// GrootModel::infer. Implementations in groot.cpp; tests test/unit/test_groot_m*.
 
-// M4.1 — VL fusion: vlln (plain LayerNorm on backbone_embedding_dim) followed
-// by a 4-layer plain-LayerNorm SelfAttentionTransformer (diffusers
-// BasicTransformerBlock, self-attention only — norm1 → attn → residual,
-// norm3 → GELU-approx FFN → residual; no cross-attention, no AdaLN, no
-// positional embeddings). Bidirectional (unmasked) over the full
-// vision+language token sequence.
+// M4.1 — VL fusion: vlln (plain LayerNorm) then a 4-layer plain-LayerNorm
+// SelfAttentionTransformer (diffusers BasicTransformerBlock, self-attn only,
+// GELU-approx FFN; no cross-attn/AdaLN/pos-embeds). Bidirectional (unmasked).
 //
-// Input `backboneFeatures` ne=[dim=2048, nTokens=280] — byte-equivalent to
-// the oracle's numpy (280, 2048) `backbone_output.backbone_features`. Both
-// outputs share that ne and byte layout, matching `vlln_output` and
+// `backboneFeatures` ne=[dim=2048, nTokens=280], byte-equivalent to oracle
+// numpy (280, 2048) `backbone_features`. Outputs match `vlln_output` and
 // `vl_self_attention_output`.
 struct GrootVlfusionOutputs {
   struct ggml_tensor* vlln_out;   // LayerNorm(backboneFeatures)
@@ -219,18 +209,18 @@ GrootVlfusionOutputs grootBuildVlfusionGraph(
 //
 // Timestep encoder (DiT.timestep_encoder): diffusers Timesteps(256,
 // flip_sin_to_cos=True, downscale_freq_shift=1) → TimestepEmbedding
-// (Linear 256→1536, SiLU, Linear 1536→1536). The sinusoidal projection is a
-// fixed function of the (integer bucket) timestep, so it's computed CPU-side
-// (like pi05ComputeTimeSincos) and the learned MLP runs in the graph.
+// (Linear 256→1536, SiLU, Linear 1536→1536). Sinusoidal projection is a fixed
+// function of the integer-bucket timestep, so computed CPU-side; learned MLP
+// runs in the graph.
 //
-// `t` is the discretized bucket the sampler feeds the model:
-// `int((step/num_inference_timesteps) * num_timestep_buckets)`. `channels`
-// is 256. Fills `out[channels]` with the diffusers layout: [cos block | sin
-// block] (flip_sin_to_cos), freqs = t · exp(-ln(10000)·i/(channels/2 − 1)).
+// `t` = discretized bucket `int((step/num_inference_timesteps) *
+// num_timestep_buckets)`. Fills `out[channels]` (channels=256) in diffusers
+// layout [cos block | sin block] (flip_sin_to_cos), freqs = t ·
+// exp(-ln(10000)·i/(channels/2 − 1)).
 void grootComputeTimestepProj(float t, int channels, float* out);
 
-// silu-less? No: TimestepEmbedding is Linear→SiLU→Linear (no activation on
-// the input projection). Produces ne=[embedding_dim=1536].
+// TimestepEmbedding is Linear→SiLU→Linear (no activation on the input
+// projection). Produces ne=[embedding_dim=1536].
 struct ggml_tensor* grootBuildTimestepMlpGraph(
     struct ggml_context* ctx, struct ggml_tensor* proj,
     struct ggml_tensor* l1W, struct ggml_tensor* l1B, struct ggml_tensor* l2W,
@@ -271,10 +261,10 @@ struct ggml_tensor* grootBuildActionEncoderGraph(
 //   h    = attn + x
 //   nh3  = layernorm_noaffine(h)
 //   h    = ff(nh3) + h                                         # GELU-approx FFN
-// Even blocks cross-attend to `encoder` (the 280-token VL features, dim
-// cross_attention_dim=2048) under `keyMask`; odd blocks self-attend (`encoder`
-// and `keyMask` null). Attention is unfused F32 here (41 queries × ≤280 keys is
-// tiny, and the key-mask applies cleanly via soft_max_ext). scale = 1/sqrt(headDim).
+// Even blocks cross-attend to `encoder` (280-token VL features,
+// cross_attention_dim=2048) under `keyMask`; odd blocks self-attend. Attention
+// is unfused F32 (41 queries × ≤280 keys is tiny, key-mask applies via
+// soft_max_ext). scale = 1/sqrt(headDim).
 //
 // `x` ne=[dim, T]; `temb` ne=[dim] (the timestep embedding); `encoder`
 // ne=[crossDim, S] or null; `keyMask` ne=[S, T] additive (0 attend / −inf
@@ -375,10 +365,20 @@ struct ggml_tensor* grootBuildVisionBlockGraph(
     const GrootVisionBlockWeights& w, int nPos, int nEmbd, int nHead,
     int headDim, float eps, float ropeFreqBase);
 
-// Forward-declared internal model struct — defined in groot.cpp. GrootModel
-// holds it via a unique_ptr so the public header doesn't drag in backend
-// handles / ggml contexts. Destructor out-of-line for the same reason as
-// Pi05Model (see pi05.hpp).
+// Derive Qwen3-VL 3-axis M-RoPE position ids C++-side for the fixed GR00T
+// fixture (option b — no IVlaModel extension). `tokens` is the length-`nTokens`
+// prompt; contiguous runs of `imageTokenId` are treated as `gh`×`gw` merged-
+// patch image grids. Fills `out` (length `nTokens*4`, axis-major
+// [axis0|axis1|axis2|axis3]) following HF `get_rope_index`: text tokens advance
+// all axes by one from the running max; image tokens share a temporal id and
+// fan out spatially. axis3 (unused width-0 rope section) is left zero. Verified
+// against oracle text_model_input.position_ids (test_groot_m4_7_positions.cpp).
+void grootDeriveMRopePositions(
+    const int32_t* tokens, int nTokens, int imageTokenId, int gh, int gw,
+    int32_t* out);
+
+// Forward-declared PIMPL (defined in groot.cpp) so the public header doesn't
+// drag in backend handles / ggml contexts. Out-of-line dtor, as in Pi05Model.
 struct GrootModelInternal;
 
 class GrootModel final : public IVlaModel {

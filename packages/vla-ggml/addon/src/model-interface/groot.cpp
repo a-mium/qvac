@@ -1,7 +1,11 @@
 #include "model-interface/groot.hpp"
 
+#include <algorithm>
+#include <chrono>
 #include <cmath>
+#include <cstring>
 #include <stdexcept>
+#include <vector>
 
 #include <ggml-backend.h>
 #include <gguf.h>
@@ -10,6 +14,46 @@
 #include "utils/BackendSelection.hpp"
 
 namespace qvac_lib_infer_vla_ggml {
+
+// Derive Qwen3-VL 3-axis M-RoPE position ids for the fixed GR00T fixture,
+// C++-side (option b). Reproduces HF's `get_rope_index` for the interleaved
+// text / image layout: a text token advances all 3 axes by one from the
+// running maximum; an image (a `gh`×`gw` merged-patch grid, detected as a
+// contiguous run of `imageTokenId` in `tokens`) shares one temporal id `st`
+// across the whole image while height/width axes fan out as `st+row`/`st+col`,
+// after which the next id resumes at `st + max(gh, gw)`. Output layout matches
+// the text-decoder graph's `positions` input: axis-major [axis0|axis1|axis2|
+// axis3] each of length `nTokens`, axis3 (the unused width-0 rope section) left
+// zero. Verified byte-for-byte against the oracle text_model_input.position_ids.
+void grootDeriveMRopePositions(
+    const int32_t* tokens, int nTokens, int imageTokenId, int gh, int gw,
+    int32_t* out) {
+  int nxt = 0; // next position value = (running max) + 1
+  int t = 0;
+  while (t < nTokens) {
+    if (tokens[t] == imageTokenId) {
+      const int st = nxt;
+      for (int r = 0; r < gh; ++r) {
+        for (int col = 0; col < gw; ++col) {
+          const int idx = t + r * gw + col;
+          out[0 * nTokens + idx] = st;
+          out[1 * nTokens + idx] = st + r;
+          out[2 * nTokens + idx] = st + col;
+          out[3 * nTokens + idx] = 0;
+        }
+      }
+      nxt = st + std::max(gh, gw);
+      t += gh * gw;
+    } else {
+      out[0 * nTokens + t] = nxt;
+      out[1 * nTokens + t] = nxt;
+      out[2 * nTokens + t] = nxt;
+      out[3 * nTokens + t] = 0;
+      ++nxt;
+      ++t;
+    }
+  }
+}
 
 // ── Small shared graph helpers (mirrors pi05.cpp's static defs) ──────────
 namespace {
@@ -69,6 +113,15 @@ static struct ggml_tensor* grootLinearXW(
   return out;
 }
 
+// Compute a fully-built forward graph on the CPU backend. v1 GR00T is CPU-only
+// (weights are mmapped into ctx_w with real data pointers; see the class
+// comment), so this runs the graph directly on `backendCpu` — the same path
+// the parity tests use via pi05_test::computeGraphCpu, but through the model's
+// own backend handle instead of a throwaway one.
+static bool grootComputeCpu(ggml_backend_t backendCpu, struct ggml_cgraph* gf) {
+  return ggml_backend_graph_compute(backendCpu, gf) == GGML_STATUS_SUCCESS;
+}
+
 } // namespace
 
 // ── Internal model state ────────────────────────────────────────────────
@@ -89,6 +142,7 @@ struct GrootModelInternal {
   float text_rope_freq_base = 5000000.0f;
   float text_rms_norm_eps = 1e-6f;
   int text_rope_sections[4] = {24, 20, 20, 0};
+  int image_token_id = 151655; // Qwen3-VL image placeholder id
 
   int vision_depth = 24;
   int vision_hidden_size = 1024;
@@ -257,6 +311,9 @@ static std::unique_ptr<GrootModelInternal> grootLoadModel(
   m->text_head_dim = ggufGetU32Or(m->gguf, "groot.text.head_dim", 128);
   m->text_ffn_length = ggufGetU32Or(m->gguf, "groot.text.ffn_length", 6144);
   m->text_vocab_size = ggufGetU32Or(m->gguf, "groot.text.vocab_size", 151936);
+  // Default 151655 keeps GGUFs converted before groot.image_token_id was added
+  // (the metadata key is new; older merged files predate it) working unchanged.
+  m->image_token_id = ggufGetU32Or(m->gguf, "groot.image_token_id", 151655);
   m->text_rope_freq_base =
       ggufGetF32Or(m->gguf, "groot.text.rope_freq_base", 5000000.0f);
   m->text_rms_norm_eps =
@@ -1163,31 +1220,422 @@ bool GrootModel::infer(
     const float* state, int stateDim, const int32_t* langTokens,
     const bool* langMask, int langLen, const float* noise, float* actionsOut,
     int* nActionsOut, VlaTimingGeneric* timingOut) {
-  // TODO(groot-phase2): graph-building not yet implemented. The GGUF loader
-  // above is complete and verified (all ~1032 tensors mapped, hparams
-  // validated against the real checkpoint). What's left: vision tower graph
-  // (ported from qvac-fabric-llm.cpp's clip_graph_qwen3vl, adapted for our
-  // fixed 2-camera/2-frame-history fixture rather than mtmd's general
-  // multi-chunk orchestration), text decoder graph with M-RoPE 3-axis
-  // position ids + deepstack feature injection at layers 0-2 (ported from
-  // src/models/qwen3vl.cpp), VL fusion, DiT (32 alternating self-/cross-
-  // attention blocks), and the 4-step Euler action-generation loop —
-  // each verified against scripts/dump_groot_activations.py's oracle
-  // activations before being wired into this function.
-  (void)images;
-  (void)nImages;
-  (void)imgWidth;
-  (void)imgHeight;
-  (void)state;
-  (void)stateDim;
-  (void)langTokens;
-  (void)langMask;
-  (void)langLen;
-  (void)noise;
-  (void)actionsOut;
-  (void)nActionsOut;
-  (void)timingOut;
-  return false;
+  // Composes the M4.1–M4.6 verified builders end-to-end (option b: everything
+  // the fixed IVlaModel signature doesn't carry — M-RoPE position ids, the
+  // image-token layout, deepstack scatter, per-step timestep embeddings — is
+  // derived here C++-side, no interface extension). Contract:
+  //   * images[i] = camera i's PRE-PATCHIFIED, merge-ordered patches, length
+  //     patchesPerImage · inFlat (Gr00tPolicy does resize/normalize/patchify
+  //     caller-side; the oracle `vision_input` hook is a forward-PRE hook on
+  //     qwen.visual, so its input is already patchified). Camera order must
+  //     match the order image-placeholder runs appear in langTokens.
+  //   * state = per-embodiment-NORMALIZED state (Gr00tPolicy-side), length
+  //     max_state_dim.
+  //   * langTokens/langMask = tokenized prompt with `image_token_id` runs at
+  //     the image positions; langMask marks valid (non-padding) tokens.
+  //   * noise = sampled x_0, length action_horizon · max_action_dim.
+  // Output unnormalization is consumer-side (Gr00tPolicy).
+  auto& m = *impl_;
+  if (actionsOut == nullptr || nActionsOut == nullptr || images == nullptr ||
+      langTokens == nullptr || langMask == nullptr || state == nullptr ||
+      noise == nullptr) {
+    return false;
+  }
+  const auto tStart = std::chrono::steady_clock::now();
+
+  // ── Derived fixture dimensions ─────────────────────────────────────────
+  if (nImages < 1 || imgWidth <= 0 || imgWidth != imgHeight) {
+    return false;
+  }
+  const int patchGrid = imgWidth / m.vision_patch_size;    // 256/16 = 16
+  const int merge = m.vision_spatial_merge_size;           // 2
+  if (patchGrid <= 0 || merge <= 0 || patchGrid % merge != 0) {
+    return false;
+  }
+  const int mergedGrid = patchGrid / merge;                // 8
+  const int patchesPerImg = patchGrid * patchGrid;         // 256
+  const int inFlat =
+      3 * m.vision_temporal_patch_size * m.vision_patch_size * m.vision_patch_size; // 1536
+  const int nVpos = nImages * patchesPerImg;               // 1024
+  const int mergedPerImg = mergedGrid * mergedGrid;        // 64
+  const int nMerged = nImages * mergedPerImg;              // 256
+  const int T = langLen;                                   // 280
+  const int DIM = m.text_hidden_size;                      // 2048
+  const int outHidden = m.vision_out_hidden_size;          // 2048
+  const int ADIM = m.input_embedding_dim;                  // 1536
+  const int nAct = m.action_horizon;                       // 40
+  const int actDim = m.max_action_dim;                     // 132
+  const int nSteps = m.num_inference_timesteps;            // 4
+  const int nDeep = static_cast<int>(m.vision_deepstack_indexes.size());
+  const int vHeadDim = m.vision_hidden_size / m.vision_num_heads; // 64
+  constexpr float VISION_ROPE_BASE = 10000.0f;
+  constexpr float VISION_EPS = 1e-6f;
+  constexpr float VLF_EPS = 1e-5f;
+  constexpr float DIT_EPS = 1e-5f;
+  constexpr int TIMESTEP_BUCKETS = 1000; // config num_timestep_buckets
+
+  for (int i = 0; i < nImages; ++i) {
+    if (images[i] == nullptr) {
+      return false;
+    }
+  }
+  if (stateDim != m.max_state_dim || outHidden != DIM) {
+    return false;
+  }
+  // The prompt must carry exactly one image-placeholder token per merged patch.
+  int nImgTok = 0;
+  for (int t = 0; t < T; ++t) {
+    if (langTokens[t] == m.image_token_id) {
+      ++nImgTok;
+    }
+  }
+  if (nImgTok != nMerged) {
+    return false;
+  }
+
+  ggml_backend_t be = m.backend_cpu;
+
+  // ── Phase 1: vision tower → merged image embeds + deepstack (to host) ───
+  const auto tVisStart = std::chrono::steady_clock::now();
+  std::vector<float> myVision(static_cast<size_t>(nMerged) * outHidden);
+  std::vector<std::vector<float>> myDeep(nDeep);
+  {
+    const size_t mem = size_t(8) * 1024u * 1024u * 1024u;
+    std::vector<uint8_t> buf(mem);
+    struct ggml_init_params ip{mem, buf.data(), false};
+    struct ggml_context* c = ggml_init(ip);
+    if (c == nullptr) {
+      return false;
+    }
+    struct ggml_tensor* wlin = grootBuildPatchEmbedLinear(
+        c, m.vision.patch_embd_w, m.vision.patch_embd_w1, m.vision_hidden_size,
+        3, m.vision_temporal_patch_size, m.vision_patch_size);
+    if (wlin == nullptr) {
+      ggml_free(c);
+      return false;
+    }
+    struct ggml_tensor* pin =
+        ggml_new_tensor_2d(c, GGML_TYPE_F32, inFlat, nVpos);
+    for (int i = 0; i < nImages; ++i) {
+      std::memcpy(
+          static_cast<float*>(pin->data) +
+              static_cast<size_t>(i) * patchesPerImg * inFlat,
+          images[i],
+          static_cast<size_t>(patchesPerImg) * inFlat * sizeof(float));
+    }
+    // Merge-ordered spatial (h,w) indices for the vision M-RoPE, one image's
+    // worth, tiled per image (matches M4.6's construction).
+    std::vector<int32_t> sH(patchesPerImg), sW(patchesPerImg);
+    int ptr = 0;
+    for (int y = 0; y < patchGrid; y += merge) {
+      for (int x = 0; x < patchGrid; x += merge) {
+        for (int dy = 0; dy < merge; ++dy) {
+          for (int dx = 0; dx < merge; ++dx) {
+            sH[ptr] = y + dy;
+            sW[ptr] = x + dx;
+            ++ptr;
+          }
+        }
+      }
+    }
+    struct ggml_tensor* pos = ggml_new_tensor_1d(c, GGML_TYPE_I32, nVpos * 4);
+    auto* pp = static_cast<int32_t*>(pos->data);
+    for (int p = 0; p < nVpos; ++p) {
+      const int loc = p % patchesPerImg;
+      pp[p] = sH[loc];
+      pp[nVpos + p] = sW[loc];
+      pp[2 * nVpos + p] = sH[loc];
+      pp[3 * nVpos + p] = sW[loc];
+    }
+    // Block-diagonal per-image attention mask.
+    struct ggml_tensor* mask =
+        ggml_new_tensor_2d(c, GGML_TYPE_F32, nVpos, nVpos);
+    auto* mp = static_cast<float*>(mask->data);
+    for (int q = 0; q < nVpos; ++q) {
+      for (int s = 0; s < nVpos; ++s) {
+        mp[size_t(q) * nVpos + s] =
+            (s / patchesPerImg == q / patchesPerImg) ? 0.0f : -INFINITY;
+      }
+    }
+    std::vector<struct ggml_tensor*> deep;
+    struct ggml_tensor* vout = grootBuildVisionGraph(
+        c, pin, wlin, m.vision.patch_embd_b, m.vision.position_embd, pos, mask,
+        m.vision, nImages, patchGrid, patchGrid, m.vision_hidden_size,
+        m.vision_num_heads, vHeadDim, merge, m.vision_num_position_embeddings,
+        outHidden, VISION_EPS, VISION_ROPE_BASE, m.vision_deepstack_indexes,
+        &deep);
+    if (vout == nullptr) {
+      ggml_free(c);
+      return false;
+    }
+    struct ggml_cgraph* gf = ggml_new_graph_custom(c, 16384, false);
+    ggml_build_forward_expand(gf, vout);
+    for (auto* d : deep) {
+      ggml_build_forward_expand(gf, d);
+    }
+    if (!grootComputeCpu(be, gf)) {
+      ggml_free(c);
+      return false;
+    }
+    std::memcpy(myVision.data(), vout->data, myVision.size() * sizeof(float));
+    for (int i = 0; i < nDeep; ++i) {
+      myDeep[i].resize(static_cast<size_t>(nMerged) * outHidden);
+      std::memcpy(
+          myDeep[i].data(), deep[i]->data, myDeep[i].size() * sizeof(float));
+    }
+    ggml_free(c);
+  }
+  const auto tVisEnd = std::chrono::steady_clock::now();
+
+  // ── Phase 2: text embeds (get_rows + vision splice) → text decoder ──────
+  const auto tPrefillStart = std::chrono::steady_clock::now();
+  std::vector<float> myBackbone(static_cast<size_t>(T) * DIM);
+  {
+    // 2a — token embeddings via get_rows(token_embd, langTokens), cast to F32.
+    std::vector<float> embeds(static_cast<size_t>(T) * DIM);
+    {
+      const size_t mem = size_t(512) * 1024u * 1024u;
+      std::vector<uint8_t> buf(mem);
+      struct ggml_init_params ip{mem, buf.data(), false};
+      struct ggml_context* c = ggml_init(ip);
+      if (c == nullptr) {
+        return false;
+      }
+      struct ggml_tensor* ids = ggml_new_tensor_1d(c, GGML_TYPE_I32, T);
+      std::memcpy(ids->data, langTokens, static_cast<size_t>(T) * sizeof(int32_t));
+      struct ggml_tensor* emb = ggml_get_rows(c, m.text.token_embd_w, ids);
+      emb = grootToF32(c, emb);
+      struct ggml_cgraph* gf = ggml_new_graph_custom(c, 512, false);
+      ggml_build_forward_expand(gf, emb);
+      if (!grootComputeCpu(be, gf)) {
+        ggml_free(c);
+        return false;
+      }
+      std::memcpy(embeds.data(), emb->data, embeds.size() * sizeof(float));
+      ggml_free(c);
+    }
+    // Splice MY vision embeds at image-placeholder positions (in appearance
+    // order, matching camera order in `images`).
+    int img = 0;
+    for (int t = 0; t < T; ++t) {
+      if (langTokens[t] == m.image_token_id) {
+        std::memcpy(
+            &embeds[static_cast<size_t>(t) * DIM],
+            &myVision[static_cast<size_t>(img) * outHidden],
+            static_cast<size_t>(DIM) * sizeof(float));
+        ++img;
+      }
+    }
+
+    // 2b — decoder.
+    const size_t mem = size_t(2) * 1024u * 1024u * 1024u;
+    std::vector<uint8_t> buf(mem);
+    struct ggml_init_params ip{mem, buf.data(), false};
+    struct ggml_context* c = ggml_init(ip);
+    if (c == nullptr) {
+      return false;
+    }
+    struct ggml_tensor* inpE = ggml_new_tensor_2d(c, GGML_TYPE_F32, DIM, T);
+    std::memcpy(inpE->data, embeds.data(), embeds.size() * sizeof(float));
+    // Derived M-RoPE position ids (axis-major [4][T]).
+    struct ggml_tensor* posT = ggml_new_tensor_1d(c, GGML_TYPE_I32, T * 4);
+    grootDeriveMRopePositions(
+        langTokens, T, m.image_token_id, mergedGrid, mergedGrid,
+        static_cast<int32_t*>(posT->data));
+    // Causal mask over valid tokens.
+    struct ggml_tensor* mask = ggml_new_tensor_2d(c, GGML_TYPE_F32, T, T);
+    auto* mp = static_cast<float*>(mask->data);
+    for (int q = 0; q < T; ++q) {
+      for (int s = 0; s < T; ++s) {
+        mp[size_t(q) * T + s] =
+            (s <= q && langMask[s]) ? 0.0f : -INFINITY;
+      }
+    }
+    // Deepstack features scattered to image positions, zero elsewhere.
+    std::vector<struct ggml_tensor*> ds(nDeep, nullptr);
+    for (int i = 0; i < nDeep; ++i) {
+      struct ggml_tensor* d = ggml_new_tensor_2d(c, GGML_TYPE_F32, DIM, T);
+      auto* dp = static_cast<float*>(d->data);
+      std::memset(dp, 0, static_cast<size_t>(DIM) * T * sizeof(float));
+      int im = 0;
+      for (int t = 0; t < T; ++t) {
+        if (langTokens[t] == m.image_token_id) {
+          std::memcpy(
+              &dp[static_cast<size_t>(t) * DIM],
+              &myDeep[i][static_cast<size_t>(im) * DIM],
+              static_cast<size_t>(DIM) * sizeof(float));
+          ++im;
+        }
+      }
+      ds[i] = d;
+    }
+    struct ggml_tensor* out = grootBuildTextDecoderGraph(
+        c, inpE, posT, mask, ds, m.text, m.text_num_layers, T, m.text_num_heads,
+        m.text_num_kv_heads, m.text_head_dim, m.text_ffn_length,
+        m.text_rope_freq_base, m.text_rope_sections, m.text_rms_norm_eps);
+    if (out == nullptr) {
+      ggml_free(c);
+      return false;
+    }
+    struct ggml_cgraph* gf = ggml_new_graph_custom(c, 8192, false);
+    ggml_build_forward_expand(gf, out);
+    if (!grootComputeCpu(be, gf)) {
+      ggml_free(c);
+      return false;
+    }
+    std::memcpy(myBackbone.data(), out->data, myBackbone.size() * sizeof(float));
+    ggml_free(c);
+  }
+  const auto tPrefillEnd = std::chrono::steady_clock::now();
+
+  // ── Phase 3: VL fusion + state encoder (features reused every step) ─────
+  std::vector<float> myVl(static_cast<size_t>(T) * DIM);
+  std::vector<float> myState(static_cast<size_t>(ADIM));
+  {
+    const size_t mem = size_t(2) * 1024u * 1024u * 1024u;
+    std::vector<uint8_t> buf(mem);
+    struct ggml_init_params ip{mem, buf.data(), false};
+    struct ggml_context* c = ggml_init(ip);
+    if (c == nullptr) {
+      return false;
+    }
+    struct ggml_tensor* bb = ggml_new_tensor_2d(c, GGML_TYPE_F32, DIM, T);
+    std::memcpy(bb->data, myBackbone.data(), myBackbone.size() * sizeof(float));
+    GrootVlfusionOutputs vlo = grootBuildVlfusionGraph(
+        c, bb, m.vlfusion, T, DIM, m.vlfusion_num_heads, m.vlfusion_head_dim,
+        VLF_EPS);
+    if (vlo.fusion_out == nullptr) {
+      ggml_free(c);
+      return false;
+    }
+    struct ggml_tensor* st =
+        ggml_new_tensor_2d(c, GGML_TYPE_F32, m.max_state_dim, 1);
+    std::memcpy(st->data, state, static_cast<size_t>(m.max_state_dim) * sizeof(float));
+    struct ggml_tensor* sf = grootBuildCategoryMlpGraph(
+        c, st, m.embodiment.state_encoder_layer1,
+        m.embodiment.state_encoder_layer2);
+    if (sf == nullptr) {
+      ggml_free(c);
+      return false;
+    }
+    struct ggml_cgraph* gf = ggml_new_graph_custom(c, 8192, false);
+    ggml_build_forward_expand(gf, vlo.fusion_out);
+    ggml_build_forward_expand(gf, sf);
+    if (!grootComputeCpu(be, gf)) {
+      ggml_free(c);
+      return false;
+    }
+    std::memcpy(myVl.data(), vlo.fusion_out->data, myVl.size() * sizeof(float));
+    std::memcpy(myState.data(), sf->data, myState.size() * sizeof(float));
+    ggml_free(c);
+  }
+
+  // ── Phase 4: 4-step Euler flow-matching loop ────────────────────────────
+  const auto tOdeStart = std::chrono::steady_clock::now();
+  std::vector<float> actions(
+      static_cast<size_t>(nAct) * actDim);
+  std::memcpy(actions.data(), noise, actions.size() * sizeof(float));
+  const float dt = 1.0f / static_cast<float>(nSteps);
+  for (int step = 0; step < nSteps; ++step) {
+    const float bucket =
+        static_cast<float>(step) * TIMESTEP_BUCKETS / static_cast<float>(nSteps);
+    const size_t mem = size_t(2) * 1024u * 1024u * 1024u;
+    std::vector<uint8_t> buf(mem);
+    struct ggml_init_params ip{mem, buf.data(), false};
+    struct ggml_context* c = ggml_init(ip);
+    if (c == nullptr) {
+      return false;
+    }
+    struct ggml_tensor* actT =
+        ggml_new_tensor_2d(c, GGML_TYPE_F32, actDim, nAct);
+    std::memcpy(actT->data, actions.data(), actions.size() * sizeof(float));
+    struct ggml_tensor* stateFeat =
+        ggml_new_tensor_2d(c, GGML_TYPE_F32, ADIM, 1);
+    std::memcpy(stateFeat->data, myState.data(), myState.size() * sizeof(float));
+    struct ggml_tensor* vl = ggml_new_tensor_2d(c, GGML_TYPE_F32, DIM, T);
+    std::memcpy(vl->data, myVl.data(), myVl.size() * sizeof(float));
+    // Timestep embedding: diffusers sinusoidal proj (CPU) → 2-layer MLP (graph).
+    std::vector<float> proj_buf(m.timestep_proj_channels);
+    grootComputeTimestepProj(bucket, m.timestep_proj_channels, proj_buf.data());
+    struct ggml_tensor* proj =
+        ggml_new_tensor_1d(c, GGML_TYPE_F32, m.timestep_proj_channels);
+    std::memcpy(proj->data, proj_buf.data(), proj_buf.size() * sizeof(float));
+    struct ggml_tensor* temb = grootBuildTimestepMlpGraph(
+        c, proj, m.dit.timestep_embedder_l1_w, m.dit.timestep_embedder_l1_b,
+        m.dit.timestep_embedder_l2_w, m.dit.timestep_embedder_l2_b);
+    // Action-encoder tau (sinusoidal, CPU).
+    std::vector<float> tau_buf(ADIM);
+    grootComputeActionTauEnc(bucket, ADIM, tau_buf.data());
+    struct ggml_tensor* tau = ggml_new_tensor_1d(c, GGML_TYPE_F32, ADIM);
+    std::memcpy(tau->data, tau_buf.data(), tau_buf.size() * sizeof(float));
+    // Cross-attention key masks: even-block image vs text, over valid tokens.
+    const int tTok = nAct + 1;
+    struct ggml_tensor* imMask =
+        ggml_new_tensor_2d(c, GGML_TYPE_F32, T, tTok);
+    struct ggml_tensor* txMask =
+        ggml_new_tensor_2d(c, GGML_TYPE_F32, T, tTok);
+    auto* imp = static_cast<float*>(imMask->data);
+    auto* txp = static_cast<float*>(txMask->data);
+    for (int q = 0; q < tTok; ++q) {
+      for (int s = 0; s < T; ++s) {
+        const bool valid = langMask[s];
+        const bool isImg = langTokens[s] == m.image_token_id;
+        imp[size_t(q) * T + s] = (valid && isImg) ? 0.0f : -INFINITY;
+        txp[size_t(q) * T + s] = (valid && !isImg) ? 0.0f : -INFINITY;
+      }
+    }
+    struct ggml_tensor* af = grootBuildActionEncoderGraph(
+        c, actT, tau, m.embodiment.action_encoder_w1,
+        m.embodiment.action_encoder_w2, m.embodiment.action_encoder_w3, ADIM,
+        nAct);
+    struct ggml_tensor* pemb = ggml_view_2d(
+        c, m.dit.position_embedding_w, ADIM, nAct,
+        m.dit.position_embedding_w->nb[1], 0);
+    af = ggml_add(c, af, pemb);
+    struct ggml_tensor* sa = ggml_concat(c, stateFeat, af, 1);
+    struct ggml_tensor* out = grootBuildDitGraph(
+        c, sa, temb, vl, imMask, txMask, m.dit, m.dit_num_layers,
+        m.dit_num_heads, m.dit_head_dim, ADIM, DIM, m.dit_ffn_inner,
+        m.dit_output_dim, m.dit_attend_text_every_n_blocks, DIT_EPS, nullptr);
+    if (out == nullptr) {
+      ggml_free(c);
+      return false;
+    }
+    struct ggml_tensor* pred = grootBuildCategoryMlpGraph(
+        c, out, m.embodiment.action_decoder_layer1,
+        m.embodiment.action_decoder_layer2);
+    // Drop the leading state token → velocity [actDim, nAct].
+    struct ggml_tensor* vel = ggml_cont(
+        c, ggml_view_2d(c, pred, actDim, nAct, pred->nb[1], pred->nb[1]));
+    struct ggml_cgraph* gf = ggml_new_graph_custom(c, 8192, false);
+    ggml_build_forward_expand(gf, vel);
+    if (!grootComputeCpu(be, gf)) {
+      ggml_free(c);
+      return false;
+    }
+    const float* velp = static_cast<const float*>(vel->data);
+    for (size_t i = 0; i < actions.size(); ++i) {
+      actions[i] += dt * velp[i];
+    }
+    ggml_free(c);
+  }
+  const auto tOdeEnd = std::chrono::steady_clock::now();
+
+  std::memcpy(actionsOut, actions.data(), actions.size() * sizeof(float));
+  *nActionsOut = nAct;
+
+  if (timingOut != nullptr) {
+    const auto tEnd = std::chrono::steady_clock::now();
+    auto toMs = [](auto a, auto b) {
+      return std::chrono::duration<double, std::milli>(b - a).count();
+    };
+    timingOut->vision_ms = toMs(tVisStart, tVisEnd);
+    timingOut->prefill_compute_ms = toMs(tPrefillStart, tPrefillEnd);
+    timingOut->prefill_total_ms = toMs(tPrefillStart, tPrefillEnd);
+    timingOut->ode_ms = toMs(tOdeStart, tOdeEnd);
+    timingOut->total_ms = toMs(tStart, tEnd);
+  }
+  return true;
 }
 
 } // namespace qvac_lib_infer_vla_ggml
