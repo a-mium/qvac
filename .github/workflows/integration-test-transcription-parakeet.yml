@@ -235,6 +235,54 @@ jobs:
           LD_LIBRARY_PATH: ${{ github.workspace }}/packages/transcription-parakeet/prebuilds/${{ matrix.platform }}-${{ matrix.arch }}
           DYLD_LIBRARY_PATH: ${{ github.workspace }}/packages/transcription-parakeet/prebuilds/${{ matrix.platform }}-${{ matrix.arch }}
 
+      # TEMPORARY (bench/parakeet-repack-linux-arm64-variants): C-level dlopen
+      # + strace diagnostics for the "no CPU device registered" failure. The
+      # release ggml loader swallows dlopen errors (silent=true under NDEBUG),
+      # so this surfaces the real dlerror and the exact paths the benchmark
+      # process opens. Remove before merging.
+      - name: DEBUG linux-arm64 ggml backend loading
+        if: ${{ inputs.run_rtf_benchmarks && matrix.platform == 'linux' && matrix.arch == 'arm64' }}
+        continue-on-error: true
+        shell: bash
+        working-directory: ${{ github.workspace }}/packages/transcription-parakeet
+        env:
+          LD_LIBRARY_PATH: ${{ github.workspace }}/packages/transcription-parakeet/prebuilds/${{ matrix.platform }}-${{ matrix.arch }}
+          QVAC_PARAKEET_BENCHMARK_DEVICE: ${{ matrix.runner || matrix.os }}
+          QVAC_PARAKEET_BENCHMARK_RUNNER: ${{ matrix.runner || matrix.os }}
+        run: |
+          set -x
+          uname -a
+          ldd --version | head -1
+          ls -la prebuilds/ || true
+          ls -la prebuilds/linux-arm64/ || true
+          ls -la prebuilds/linux-arm64/qvac__transcription-parakeet/ || true
+          cat > /tmp/dltest.c <<'EOF'
+          #include <dlfcn.h>
+          #include <stdio.h>
+          int main(int argc, char**argv){
+              for(int i=1;i<argc;i++){
+                  void*h=dlopen(argv[i],RTLD_NOW|RTLD_LOCAL);
+                  if(h){
+                      void*s=dlsym(h,"ggml_backend_score");
+                      printf("%s -> OK", argv[i]);
+                      if(s){int(*f)(void)=(int(*)(void))s;printf(" score=%d",f());}
+                      printf("\n");
+                  } else printf("%s -> FAIL: %s\n", argv[i], dlerror());
+              }
+              return 0;
+          }
+          EOF
+          cc -O0 -o /tmp/dltest /tmp/dltest.c
+          /tmp/dltest prebuilds/linux-arm64/qvac__transcription-parakeet/libqvac-speech-ggml-*.so || true
+          ldd prebuilds/linux-arm64/qvac__transcription-parakeet/libqvac-speech-ggml-cpu-armv8.6_2.so || true
+          sudo apt-get install -y -q strace > /dev/null 2>&1 || true
+          export QVAC_PARAKEET_BENCHMARK_MATRIX_JSON='[{"modelType":"tdt","quant":"q4_0","useGPU":false}]'
+          strace -f -e trace=openat -o /tmp/st.txt node scripts/run-rtf-benchmark-matrix.js || true
+          echo "=== ggml opens in strace ==="
+          grep "ggml" /tmp/st.txt | head -80 || true
+          echo "=== prebuilds opens in strace (tail) ==="
+          grep "prebuilds" /tmp/st.txt | tail -40 || true
+
       # RTF benchmark leg (run_rtf_benchmarks=true, set by
       # benchmark-performance-transcription-parakeet.yml). Runs the matrix
       # runner once per (modelType, useGPU) combo and writes per-config JSON
