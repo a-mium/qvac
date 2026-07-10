@@ -14,6 +14,16 @@ dependencies = ["pydantic>=2.6,<3"]
 [project.optional-dependencies]
 gen = ["datamodel-code-generator==0.68.0", "black==26.5.1"]
 dev = ["pytest==9.1.1", "pytest-asyncio==1.4.0"]
+# QVAC-21806 PoC only -- neither package is on PyPI yet (both v0.0.1, git-only).
+# Pinned to their current HEAD commits for reproducibility while unreleased.
+bare-rpc = [
+  "bare-rpc-python @ git+https://github.com/holepunchto/bare-rpc-python.git@5219c528866678553cb9716f80a199c9accfe8c1",
+  "compact-encoding-python @ git+https://github.com/holepunchto/compact-encoding-python.git@e7e1f080eb413c6ea06f8c6400a9716857c67266",
+]
+
+[tool.hatch.metadata]
+# QVAC-21806 PoC: bare-rpc-python/compact-encoding-python aren't on PyPI yet.
+allow-direct-references = true
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/qvac"]
