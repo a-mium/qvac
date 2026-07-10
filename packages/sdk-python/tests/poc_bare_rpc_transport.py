@@ -29,13 +29,14 @@ import json
 import os
 import subprocess
 import tempfile
+from pathlib import Path
 from typing import Any, AsyncIterator
 
 import bare_rpc
 
 SDK = os.environ.get(
     "QVAC_POC_SDK_DIR",
-    "/Users/lauri/noxtton/qvac-new/packages/sdk",
+    str(Path(__file__).resolve().parent.parent.parent / "sdk"),
 )
 BARE = f"{SDK}/node_modules/bare-runtime-darwin-arm64/bin/bare"
 WORKER = f"{SDK}/dist/server/worker.js"
