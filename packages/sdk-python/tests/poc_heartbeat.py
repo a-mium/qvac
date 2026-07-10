@@ -410,6 +410,7 @@ from qvac.schemas import (
     EmbedRequest,
     HeartbeatRequest,
     LoadModelRequest,
+    ModelType,
     TextToSpeechStreamRequest,
     TranscribeRequest,
     TranscribeStreamRequest,
@@ -451,7 +452,7 @@ async def _load(transport, model_src, model_type, model_config=None):
 async def demo_completion(w, model):
     transport = PocTransport(w)
     print(f"[loadModel] loading LLM {model} ...")
-    model_id = await _load(transport, model, "llamacpp-completion")
+    model_id = await _load(transport, model, ModelType.llamacpp_completion)
     print(f"[loadModel] -> modelId={model_id!r}\n")
 
     print("[completion] streaming 'Say hello in five words.':")
@@ -476,7 +477,7 @@ async def demo_completion(w, model):
 async def demo_embed(w, model):
     transport = PocTransport(w)
     print(f"[loadModel] loading embedding model {model} ...")
-    model_id = await _load(transport, model, "llamacpp-embedding")
+    model_id = await _load(transport, model, ModelType.llamacpp_embedding)
     print(f"[loadModel] -> modelId={model_id!r}")
 
     request = EmbedRequest.model_validate(
@@ -495,7 +496,7 @@ async def demo_transcribe(w, model):
     transport = PocTransport(w)
     audio = os.environ.get("QVAC_POC_AUDIO", DEFAULT_AUDIO)
     print(f"[loadModel] loading transcription model {model} ...")
-    model_id = await _load(transport, model, "parakeet-transcription")
+    model_id = await _load(transport, model, ModelType.parakeet_transcription)
     print(f"[loadModel] -> modelId={model_id!r}")
     print(f"[transcribe] {audio}:")
 
@@ -554,7 +555,7 @@ async def demo_transcribe_stream(w, model):
     chunks += [silence[i : i + per_chunk] for i in range(0, len(silence), per_chunk)]
 
     print(f"[loadModel] loading transcription model {model} ...")
-    model_id = await _load(transport, model, "parakeet-transcription")
+    model_id = await _load(transport, model, ModelType.parakeet_transcription)
     print(f"[loadModel] -> modelId={model_id!r}")
     print(f"[transcribeStream] DUPLEX: {rate}Hz mono {fmt}, {len(chunks)} chunks:")
 
@@ -601,7 +602,7 @@ async def demo_tts_stream(w, model):
     model_id = await _load(
         transport,
         model,
-        "tts-ggml",
+        ModelType.tts_ggml,
         model_config={"ttsEngine": "supertonic", "language": "en"},
     )
     print(f"[loadModel] -> modelId={model_id!r}")

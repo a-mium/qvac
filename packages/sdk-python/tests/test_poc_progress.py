@@ -72,6 +72,7 @@ async def test_load_model_with_progress_streams_real_progress_then_terminal_repl
         LoadModelRequest,
         LoadModelResponse,
         ModelProgressResponse,
+        ModelType,
     )
     from qvac.methods import load_model_with_progress
 
@@ -79,7 +80,7 @@ async def test_load_model_with_progress_streams_real_progress_then_terminal_repl
         {
             "type": "loadModel",
             "modelSrc": REGISTRY_MODEL_SRC,
-            "modelType": "llamacpp-completion",
+            "modelType": ModelType.llamacpp_completion,
             "modelConfig": {},
         }
     )

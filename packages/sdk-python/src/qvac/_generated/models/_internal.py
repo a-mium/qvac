@@ -3,7 +3,7 @@
 
 from __future__ import annotations
 
-from enum import Enum, IntEnum
+from enum import Enum
 from typing import Any, Literal
 
 from pydantic import (
@@ -1219,6 +1219,56 @@ class CompletionStreamResponse(BaseModel):
     ]
 
 
+class ModelType(Enum):
+    llamacpp_completion = 'llamacpp-completion'
+    whispercpp_transcription = 'whispercpp-transcription'
+    bci_whispercpp_transcription = 'bci-whispercpp-transcription'
+    llamacpp_embedding = 'llamacpp-embedding'
+    nmtcpp_translation = 'nmtcpp-translation'
+    onnx_tts = 'onnx-tts'
+    tts_ggml = 'tts-ggml'
+    parakeet_transcription = 'parakeet-transcription'
+    ggml_ocr = 'ggml-ocr'
+    sdcpp_generation = 'sdcpp-generation'
+    ggml_vla = 'ggml-vla'
+    ggml_classification = 'ggml-classification'
+
+
+class PluginId(Enum):
+    llm = '@qvac/sdk/llamacpp-completion/plugin'
+    embedding = '@qvac/sdk/llamacpp-embedding/plugin'
+    whisper = '@qvac/sdk/whispercpp-transcription/plugin'
+    bci = '@qvac/sdk/bci-whispercpp-transcription/plugin'
+    nmt = '@qvac/sdk/nmtcpp-translation/plugin'
+    tts = '@qvac/sdk/tts-ggml/plugin'
+    ocr = '@qvac/sdk/ggml-ocr/plugin'
+    diffusion = '@qvac/sdk/sdcpp-generation/plugin'
+    vla = '@qvac/sdk/ggml-vla/plugin'
+    classification = '@qvac/sdk/ggml-classification/plugin'
+
+
+class SupportedAudioFormat(Enum):
+    field_mp3 = '.mp3'
+    field_m4a = '.m4a'
+    field_ogg = '.ogg'
+    field_wav = '.wav'
+    field_flac = '.flac'
+    field_aac = '.aac'
+    field_raw = '.raw'
+
+
+class ToolsMode(Enum):
+    static = 'static'
+    dynamic = 'dynamic'
+
+
+class Verbosity(Enum):
+    error = 0
+    warn = 1
+    info = 2
+    debug = 3
+
+
 class DeleteCacheAllRequest(BaseModel):
     type: Literal['deleteCache']
     all: Literal[True]
@@ -2120,11 +2170,11 @@ class LoadModelSrcRequestLlamacppCompletionDelegate(BaseModel):
     )
 
 
-class Verbosity(IntEnum):
-    integer_0 = 0
-    integer_1 = 1
-    integer_2 = 2
-    integer_3 = 3
+class LoadModelSrcRequestLlamacppCompletionModelConfigVerbosity(Enum):
+    number_0 = 0
+    number_1 = 1
+    number_2 = 2
+    number_3 = 3
 
 
 class LoadModelSrcRequestLlamacppCompletionModelConfigToolsMode(Enum):
@@ -2205,7 +2255,9 @@ class LoadModelSrcRequestLlamacppCompletionModelConfig(BaseModel):
     predict: Literal[-1] | Literal[-2] | conint(ge=1, le=9007199254740991) | None = None
     system_prompt: str | None = None
     no_mmap: bool | None = None
-    verbosity: Verbosity | None = None
+    verbosity: LoadModelSrcRequestLlamacppCompletionModelConfigVerbosity | None = Field(
+        None, title='LoadModelSrcRequestLlamacppCompletionModelConfigVerbosity'
+    )
     presence_penalty: float | None = None
     frequency_penalty: float | None = None
     repeat_penalty: float | None = None
@@ -2815,6 +2867,13 @@ class LoadModelSrcRequestLlamacppEmbeddingModelConfigSplitMode(Enum):
     row = 'row'
 
 
+class LoadModelSrcRequestLlamacppEmbeddingModelConfigVerbosity(Enum):
+    number_0 = 0
+    number_1 = 1
+    number_2 = 2
+    number_3 = 3
+
+
 class LoadModelSrcRequestLlamacppEmbeddingModelConfig(BaseModel):
     gpu_layers: conint(ge=-9007199254740991, le=9007199254740991) | None = Field(
         None, alias='gpuLayers'
@@ -2852,7 +2911,9 @@ class LoadModelSrcRequestLlamacppEmbeddingModelConfig(BaseModel):
         title='LoadModelSrcRequestLlamacppEmbeddingModelConfigSplitMode',
     )
     tensor_split: str | None = Field(None, alias='tensorSplit')
-    verbosity: Verbosity | None = None
+    verbosity: LoadModelSrcRequestLlamacppEmbeddingModelConfigVerbosity | None = Field(
+        None, title='LoadModelSrcRequestLlamacppEmbeddingModelConfigVerbosity'
+    )
     opencl_cache_dir: str | None = Field(None, alias='openclCacheDir')
 
 

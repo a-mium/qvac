@@ -59,6 +59,22 @@ def test_every_manifest_method_resolves_to_a_request_and_response_class(
         assert response_title in resolved, f"{name} has no resolvable response class"
 
 
+def test_every_registered_constant_resolves_to_an_enum_class(
+    manifest_methods: list[dict],
+) -> None:
+    # Public constants (ModelType, PluginId, ...) merged into schema.json's
+    # $defs by @/schemas/constants-registry.ts -- see .cursor/rules/sdk/
+    # public-constants-contract.mdc in packages/sdk. Always plain top-level
+    # classes, resolved the same way as every Request/Response.
+    constant_titles = generate.load_constant_titles()
+    assert constant_titles, "sanity: the contract actually has registered constants"
+
+    resolved = generate.resolve_titles(generate.MODELS_DIR, manifest_methods)
+    for title in constant_titles:
+        assert title in resolved, f"{title} has no resolvable class"
+        assert resolved[title][0] is None, f"{title} should be a plain top-level class"
+
+
 def test_index_reexports_every_resolved_title(manifest_methods: list[dict]) -> None:
     resolved = generate.resolve_titles(generate.MODELS_DIR, manifest_methods)
     rendered = generate.render_index(resolved)

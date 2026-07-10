@@ -37,6 +37,7 @@ from qvac.schemas import (
     CompletionStreamRequest,
     LoadModelRequest,
     ModelProgressResponse,
+    ModelType,
 )
 from qvac.methods import completion_stream, load_model_with_progress
 from qvac.api import unload_model
@@ -51,7 +52,7 @@ async def main() -> int:
                 {
                     "type": "loadModel",
                     "modelSrc": LLAMA_3_2_1B_INST_Q4_0.src,
-                    "modelType": "llamacpp-completion",
+                    "modelType": ModelType.llamacpp_completion,
                     "modelConfig": {},
                 }
             )
